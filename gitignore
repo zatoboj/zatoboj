@@ -1,0 +1,4 @@
+.gitignore
+.DS_Store
+git_commit.ipynb
+git_commit_short.ipynb
