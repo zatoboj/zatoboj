@@ -1,4 +1,4 @@
-### Hi there 👋
+### ZA TOBOJ PRIDET TRANSFORMER 👋
 
 <!--
 **zatoboj/zatoboj** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
@@ -15,4 +15,5 @@ Here are some ideas to get you started:
 - ⚡ Fun fact: ...
 -->
 
- Chuvachki, Edik v dele!
+BUD OSTOROJEN
+TRENIRUJ SVOI SLOI
