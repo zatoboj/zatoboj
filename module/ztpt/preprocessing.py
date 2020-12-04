@@ -99,36 +99,36 @@ def preprocess(conf):
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len'])   
     base_dir_read = conf['base_dir_read']
     base_dir_write = conf['base_dir_write']
-    # first deal with train-test data
+    # first deal with train data
     train_input_path = base_dir_read + 'train-v2.0.json'
     train_data_path = base_dir_write + conf_prefix + '-train.pickle'
-    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
-    if os.path.exists(train_data_path) and os.path.exists(test_data_path):
-        print(f'Preprocessed train and test data files already exist as {train_data_path} and {test_data_path}.')
+    if os.path.exists(train_data_path):
+        print(f'Preprocessed train data already exist as {train_data_path}.')
     else:               
         if os.path.exists(train_input_path):
             with open(train_input_path, "r") as reader:
-                input_data = json.load(reader)["data"]
+                train_data = json.load(reader)["data"]
         else:
             raise ValueError(f'Input train data file {train_input_path} does not exist. Please, upload the file to the folder.')   
-        data_train, data_test = train_test_split(input_data, test_size=0.05, random_state=420)
-        data_train, data_test = organize_raw_data(data_train), organize_raw_data(data_test)
-        data_train, data_test = tokenize_data(data_train, conf), tokenize_data(data_test, conf)
-        pickle.dump(data_train, train_data_path, 'wb')
-        pickle.dump(data_test, test_data_path, 'wb')
-        print(f'Preprocessed data succesfully saved as {train_data_name} and {test_data_name}.')
-    # now deal with dev data (final test)   
+        train_data = organize_raw_data(data_train)
+        train_data = tokenize_data(train_data, conf)
+        pickle.dump(train_data, train_data_path, 'wb')
+        print(f'Preprocessed train data succesfully saved as {train_data_name}.')
+    # now deal with val/test data (20%/80% split of 'dev-v2.0.json' file)
     dev_input_path = base_dir_read + 'dev-v2.0.json'
-    dev_data_path = base_dir_write + conf_prefix + '-dev.pickle'
-    if os.path.exists(dev_data_path):
-        print(f'Preprocessed validation data file already exists as {val_data_path}.')
+    val_data_path = base_dir_write + conf_prefix + '-val.pickle'
+    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
+    if os.path.exists(val_data_path) and os.path.exists(test_data_path):
+        print(f'Preprocessed validation and test data already exists as {val_data_path} and {test_data_path}.')
     else:
         if os.path.exists(dev_input_path):
             with open(dev_input_path, "r") as reader:
                 dev_data = json.load(reader)["data"]
         else:
             raise ValueError(f'Input dev data file {dev_input_path} does not exist. Please, upload the file to the folder.')
-        dev_data = organize_raw_data(dev_data)
-        dev_data = tokenize_data(dev_data, conf)
-        pickle.dump(dev_data, dev_data_path, 'wb')
-        print(f'Preprocessed dev data succesfully saved as {dev_data_path}.')
+        val_data, test_data = train_test_split(dev_data, test_size=0.8, random_state=420)
+        val_data, test_data = organize_raw_data(val_data), organize_raw_data(test_data)
+        val_data, test_data = tokenize_data(val_data, conf), tokenize_data(test_data, conf)
+        pickle.dump(val_data, val_data_path, 'wb')
+        pickle.dump(test_data, test_data_path, 'wb')
+        print(f'Preprocessed validation and test data succesfully saved as {val_data_path} and {test_data_path}.')
