@@ -110,7 +110,7 @@ def preprocess(conf):
                 train_data = json.load(reader)["data"]
         else:
             raise ValueError(f'Input train data file {train_input_path} does not exist. Please, upload the file to the folder.')   
-        train_data = organize_raw_data(data_train)
+        train_data = organize_raw_data(train_data)
         train_data = tokenize_data(train_data, conf)
         pickle.dump(train_data, train_data_path, 'wb')
         print(f'Preprocessed train data succesfully saved as {train_data_name}.')
