@@ -7,7 +7,7 @@ def readfile(filename):
         return f.read()
     
 setup(
-    name="pridet_transformer",
+    name="ztpt",
     version='0.1.0', # the VERSION file is shared with the documentation
     description="Training and fine-tuning transformer-based neural network to perform on SQuAD dataset",
     long_description=readfile("README.md"), # get the long description from the README

@@ -5,10 +5,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 from .utils import get_tokenizer
 
-root_dir = "/content/gdrive/My Drive/"
-base_dir_read = root_dir + 'ybshmmlchk/zatoboj/SQUAD/'
-base_dir_write = root_dir + 'ybshmmlchk/'
-
 def organize_raw_data(input_data: list) -> list:
     '''
     Organize raw data obtained from json file into a list ot tuples:
@@ -101,6 +97,8 @@ def preprocess(conf):
     Run all preprocessing steps for 'train-v2.0.json' and 'val-v2.0.json' files if the preprocessing has not already been done for a given configuration.
     '''
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len'])   
+    base_dir_read = conf['base_dir_read']
+    base_dir_write = conf['base_dir_write']
     # first deal with train-test data
     train_input_path = base_dir_read + 'train-v2.0.json'
     train_data_path = base_dir_write + conf_prefix + '-train.pickle'

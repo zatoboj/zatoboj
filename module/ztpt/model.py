@@ -10,12 +10,10 @@ from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, Da
 from transformers import AlbertModel, AlbertTokenizer
 from .preprocessing import preprocess
 
-root_dir = "/content/gdrive/My Drive/"
-base_dir_read = root_dir + 'ybshmmlchk/zatoboj/SQUAD/'
-base_dir_write = root_dir + 'ybshmmlchk/'
-
 def load_data(conf):
     preprocess(conf)
+    base_dir_read = conf['base_dir_read']
+    base_dir_write = conf['base_dir_write']
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len']) 
     train_data_path = base_dir_write + conf_prefix + '-train.pickle'
     test_data_path = base_dir_write + conf_prefix + '-test.pickle'
@@ -79,13 +77,14 @@ def generate_squad_dataloaders(batch_size, conf):
     return squad_train_dataloader, squad_test_dataloader, squad_val_dataloader
 
 class SQUADBERT(pl.LightningModule):
-    def __init__(self, batch_size, conf, freeze_layers = 0):
+    def __init__(self, conf):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
-        self.batch_size = batch_size
         self.conf = conf
+        self.batch_size = conf['batch_size']       
         self.max_len = conf['max_len']
-        self.freeze_layers = freeze_layers
+        self.freeze_layers = conf['freeze_layers']
+        self.lr = conf['lr']
         # initializing BERT
         self.bert = bert.cuda()
         self.n = bert.config.hidden_size
@@ -172,7 +171,7 @@ class SQUADBERT(pl.LightningModule):
         return {'avg_val_loss': avg_loss, 'progress_bar': tensorboard_logs}
     
     def configure_optimizers(self):
-        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=3e-05, eps=1e-08)
+        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
 
     def train_dataloader(self):
         return self.squad_train_dataloader
