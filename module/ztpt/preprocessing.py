@@ -117,18 +117,18 @@ def preprocess(conf):
         pickle.dump(data_train, train_data_path, 'wb')
         pickle.dump(data_test, test_data_path, 'wb')
         print(f'Preprocessed data succesfully saved as {train_data_name} and {test_data_name}.')
-    # now deal with val data    
-    val_input_path = base_dir_read + 'val-v2.0.json'
-    val_data_path = base_dir_write + conf_prefix + '-val.pickle'
-    if os.path.exists(train_data_path):
+    # now deal with dev data (final test)   
+    dev_input_path = base_dir_read + 'dev-v2.0.json'
+    dev_data_path = base_dir_write + conf_prefix + '-dev.pickle'
+    if os.path.exists(dev_data_path):
         print(f'Preprocessed validation data file already exists as {val_data_path}.')
     else:
-        if os.path.exists(val_input_path):
-            with open(val_input_path, "r") as reader:
-                input_data = json.load(reader)["data"]
+        if os.path.exists(dev_input_path):
+            with open(dev_input_path, "r") as reader:
+                dev_data = json.load(reader)["data"]
         else:
-            raise ValueError(f'Input validation data file {val_input_path} does not exist. Please, upload the file to the folder.')
-        data_val = organize_raw_data(data_val)
-        data_val = tokenize_data(data_val, conf)
-        pickle.dump(data_val, val_data_path, 'wb')
-        print(f'Preprocessed validation data succesfully saved as {val_data_path}.')
+            raise ValueError(f'Input dev data file {dev_input_path} does not exist. Please, upload the file to the folder.')
+        dev_data = organize_raw_data(dev_data)
+        dev_data = tokenize_data(dev_data, conf)
+        pickle.dump(dev_data, dev_data_path, 'wb')
+        print(f'Preprocessed dev data succesfully saved as {dev_data_path}.')
