@@ -112,7 +112,8 @@ def preprocess(conf):
             raise ValueError(f'Input train data file {train_input_path} does not exist. Please, upload the file to the folder.')   
         train_data = organize_raw_data(train_data)
         train_data = tokenize_data(train_data, conf)
-        pickle.dump(train_data, train_data_path, 'wb')
+        with open(train_data_path, 'wb') as f:
+            pickle.dump(train_data, f)
         print(f'Preprocessed train data succesfully saved as {train_data_name}.')
     # now deal with val/test data (20%/80% split of 'dev-v2.0.json' file)
     dev_input_path = base_dir_read + 'dev-v2.0.json'
@@ -129,6 +130,8 @@ def preprocess(conf):
         val_data, test_data = train_test_split(dev_data, test_size=0.8, random_state=420)
         val_data, test_data = organize_raw_data(val_data), organize_raw_data(test_data)
         val_data, test_data = tokenize_data(val_data, conf), tokenize_data(test_data, conf)
-        pickle.dump(val_data, val_data_path, 'wb')
-        pickle.dump(test_data, test_data_path, 'wb')
+        with open(val_data_path, 'wb') as f:
+            pickle.dump(val_data, f)
+        with open(test_data_path, 'wb') as f:
+            pickle.dump(test_data, f)
         print(f'Preprocessed validation and test data succesfully saved as {val_data_path} and {test_data_path}.')

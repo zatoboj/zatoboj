@@ -7,8 +7,8 @@ from tqdm import tqdm, trange
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
-from transformers import AlbertModel, AlbertTokenizer
 from .preprocessing import preprocess
+from .utils import get_transformer
 
 def load_data(conf):
     preprocess(conf)
@@ -16,25 +16,26 @@ def load_data(conf):
     base_dir_write = conf['base_dir_write']
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len']) 
     train_data_path = base_dir_write + conf_prefix + '-train.pickle'
-    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
     val_data_path = base_dir_write + conf_prefix + '-val.pickle'
+    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
     with open(train_data_path, 'rb') as f:
         train_data = pickle.load(f)
-    with open(test_data_path, 'rb') as f:
-        test_data = pickle.load(f)
     with open(val_data_path, 'rb') as f:
-        val_data = pickle.load(f)    
+        val_data = pickle.load(f) 
+    with open(test_data_path, 'rb') as f:
+        test_data = pickle.load(f)      
     print('Data has been succesfully loaded')
     print('Train data size:'.ljust(21), len(train_data['labels']))
-    print('Test data size:'.ljust(21), len(test_data['labels']))
-    print('Validation data size:'.ljust(21), len(val_data['labels']))                
-    return train_data, test_data, val_data
+    print('Validation data size:'.ljust(21), len(val_data['labels']))
+    print('Test data size:'.ljust(21), len(test_data['labels']))                   
+    return train_data, val_data, test_data
 
-def generate_squad_dataloaders(batch_size, conf):
+def generate_squad_dataloaders(conf):
     # ----------------------
     # TRAIN/VAL/TEST DATALOADERS
     # ----------------------
-    train_data, test_data, val_data = load_data(conf)
+    batch_size = conf['batch_size']
+    train_data, val_data, test_data  = load_data(conf)
     # TensorDataset from training examples. ".cuda()" puts the corresponding tensor on gpu
     squad_train_dataset = TensorDataset(torch.tensor(train_data['input_ids'], dtype=torch.long).cuda(),
                                 torch.tensor(train_data['attention_mask'], dtype=torch.long).cuda(),  
@@ -74,7 +75,7 @@ def generate_squad_dataloaders(batch_size, conf):
     test_sampler = RandomSampler(squad_test_dataset)
     squad_test_dataloader = DataLoader(squad_test_dataset, sampler=test_sampler, batch_size = batch_size)
 
-    return squad_train_dataloader, squad_test_dataloader, squad_val_dataloader
+    return squad_train_dataloader, squad_val_dataloader, squad_test_dataloader 
 
 class SQUADBERT(pl.LightningModule):
     def __init__(self, conf):
@@ -86,10 +87,10 @@ class SQUADBERT(pl.LightningModule):
         self.freeze_layers = conf['freeze_layers']
         self.lr = conf['lr']
         # initializing BERT
-        self.bert = bert.cuda()
-        self.n = bert.config.hidden_size
+        self.bert = get_transformer(conf)
+        self.n = self.bert.config.hidden_size
         # initializing dataloaders
-        self.squad_train_dataloader, self.squad_test_dataloader, self.squad_val_dataloader = generate_squad_dataloaders(self.batch_size)
+        self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.conf)
         # initializing additional layers -- start and end vectors
         self.Start = nn.Linear(self.n, 1)
         self.End = nn.Linear(self.n, 1)

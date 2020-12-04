@@ -6,7 +6,6 @@ def get_tokenizer(conf):
     '''
     Return tokenizer based on configuration.
     '''
-    print('hello!')
     if conf['model'] == 'albert':
         from transformers import AlbertTokenizer as tokenizer
     elif conf['model'] == 'bert':
@@ -16,7 +15,7 @@ def get_tokenizer(conf):
     try:
         return tokenizer.from_pretrained(conf['model'] + '-' + conf['model_version'])
     except:
-        raise ValueError('Unknown model version. Please, select a different transformer model version or include this version in the code.')
+        raise ValueError(f"Unknown model version: {conf['model'] + '-' + conf['model_version']}. Please, select a different transformer model version or include this version in the code.")
 
 def get_transformer(conf):
     '''
