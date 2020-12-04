@@ -21,8 +21,13 @@ def organize_raw_data(input_data: list) -> list:
                     answer_start = qa["answers"][0]["answer_start"]
                     answer_text = qa["answers"][0]["text"]
                 else:
-                    answer_start = qa["plausible_answers"][0]["answer_start"]
-                    answer_text = qa["plausible_answers"][0]["text"]
+                    plaus_answer = qa["plausible_answers"]
+                    if plaus_answer:
+                        answer_start = plaus_answer[0]["answer_start"]
+                        answer_text = plaus_answer[0]["text"]
+                    else:
+                        answer_start = 0
+                        answer_text = ''
                 answer_end = answer_start + len(answer_text)
                 preprocessed_data.append((question_text, paragraph_text, label, answer_start, answer_end, answer_text))
     preprocessed_data = shuffle(preprocessed_data, random_state=420)
@@ -114,7 +119,7 @@ def preprocess(conf):
         train_data = tokenize_data(train_data, conf)
         with open(train_data_path, 'wb') as f:
             pickle.dump(train_data, f)
-        print(f'Preprocessed train data succesfully saved as {train_data_name}.')
+        print(f'Preprocessed train data succesfully saved as {train_data_path}.')
     # now deal with val/test data (20%/80% split of 'dev-v2.0.json' file)
     dev_input_path = base_dir_read + 'dev-v2.0.json'
     val_data_path = base_dir_write + conf_prefix + '-val.pickle'
