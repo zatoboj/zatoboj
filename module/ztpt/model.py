@@ -12,6 +12,7 @@ from .utils import get_transformer
 
 def load_data(conf):
     preprocess(conf)
+    print('Beginning to load preprocessed data...')
     base_dir_read = conf['base_dir_read']
     base_dir_write = conf['base_dir_write']
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len']) 
@@ -23,8 +24,11 @@ def load_data(conf):
     with open(val_data_path, 'rb') as f:
         val_data = pickle.load(f) 
     with open(test_data_path, 'rb') as f:
-        test_data = pickle.load(f)      
-    print('Data has been succesfully loaded')
+        test_data = pickle.load(f)
+    train_data['indexing'] = list(range(len(train_data['labels'])))
+    val_data['indexing'] = list(range(len(val_data['labels'])))   
+    test_data['indexing'] = list(range(len(test_data['labels'])))   
+    print('Preprocessed data has been succesfully loaded')
     print('Train data size:'.ljust(21), len(train_data['labels']))
     print('Validation data size:'.ljust(21), len(val_data['labels']))
     print('Test data size:'.ljust(21), len(test_data['labels']))                   
@@ -43,8 +47,9 @@ def generate_squad_dataloaders(conf):
                                 1 - torch.tensor(train_data['labels'], dtype=torch.long).cuda(), #label is 0 if there is an answer in the original dataset
                                 torch.tensor(train_data['answer_mask'], dtype=torch.long).cuda(),
                                 torch.tensor(train_data['indexing'], dtype=torch.long).cuda(),
-                                torch.tensor(train_data['answer_starts']).cuda(),
-                                torch.tensor(train_data['answer_ends']).cuda())
+                                #torch.tensor(train_data['answer_starts'], dtype=torch.long).cuda(),
+                                #torch.tensor(train_data['answer_ends'], dtype=torch.long).cuda()
+                                )
     # TensorDataset from validation examples.
     squad_val_dataset = TensorDataset(torch.tensor(val_data['input_ids'], dtype=torch.long).cuda(),
                                 torch.tensor(val_data['attention_mask'], dtype=torch.long).cuda(),  
@@ -52,16 +57,18 @@ def generate_squad_dataloaders(conf):
                                 1 - torch.tensor(val_data['labels'], dtype=torch.long).cuda(), #label is 0 if there is an answer in the original dataset
                                 torch.tensor(val_data['answer_mask'], dtype=torch.long).cuda(),
                                 torch.tensor(val_data['indexing'], dtype=torch.long).cuda(),
-                                torch.tensor(val_data['answer_starts']).cuda(),
-                                torch.tensor(val_data['answer_ends']).cuda())
+                                torch.tensor(val_data['answer_starts'], dtype=torch.long).cuda(),
+                                torch.tensor(val_data['answer_ends'], dtype=torch.long).cuda())
   
     # TensorDataset from test examples.
-    squad_test_dataset = TensorDataset(torch.tensor(test_data['input_id'], dtype=torch.long).cuda(),
+    squad_test_dataset = TensorDataset(torch.tensor(test_data['input_ids'], dtype=torch.long).cuda(),
                                 torch.tensor(test_data['attention_mask'], dtype=torch.long).cuda(),  
                                 torch.tensor(test_data['token_type_ids'], dtype=torch.long).cuda(), 
                                 1 - torch.tensor(test_data['labels'], dtype=torch.long).cuda(), #label is 0 if there is an answer in the original dataset
                                 torch.tensor(test_data['answer_mask'], dtype=torch.long).cuda(),
-                                torch.tensor(test_data['indexing'], dtype=torch.long).cuda())
+                                torch.tensor(test_data['indexing'], dtype=torch.long).cuda(),
+                                torch.tensor(test_data['answer_starts'], dtype=torch.long).cuda(),
+                                torch.tensor(test_data['answer_ends'], dtype=torch.long).cuda())
 
     # train loader
     train_sampler = RandomSampler(squad_train_dataset)
@@ -87,7 +94,7 @@ class SQUADBERT(pl.LightningModule):
         self.freeze_layers = conf['freeze_layers']
         self.lr = conf['lr']
         # initializing BERT
-        self.bert = get_transformer(conf)
+        self.bert = get_transformer(conf).cuda()
         self.n = self.bert.config.hidden_size
         # initializing dataloaders
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.conf)

@@ -76,9 +76,9 @@ def tokenize_data(preprocessed_data: list, conf: dict) -> dict:
                 answer_ends.append(answer_end-1)
                 plausible_answers.append('no answer')
                 actual_answers.append(answer_text)
-        labels.append(label)
-        full_questions.append(question)
-        full_paragraphs.append(paragraph)
+            labels.append(label)
+            full_questions.append(question)
+            full_paragraphs.append(paragraph)
     print('Succesfully finished tokenizing data.')    
   
     dict_data = {
