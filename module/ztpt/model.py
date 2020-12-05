@@ -13,12 +13,11 @@ from .utils import get_transformer
 def load_data(conf):
     preprocess(conf)
     print('Beginning to load preprocessed data...')
-    raw_data_dir = conf['raw_data_dir']
-    prep_data_dir = conf['prep_data_dir']
+    data_dir = conf['data_dir']
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len']) 
-    train_data_path = prep_data_dir + conf_prefix + '-train.pickle'
-    val_data_path = prep_data_dir + conf_prefix + '-val.pickle'
-    test_data_path = prep_data_dir + conf_prefix + '-test.pickle'
+    train_data_path = data_dir + conf_prefix + '-train.pickle'
+    val_data_path = data_dir + conf_prefix + '-val.pickle'
+    test_data_path = data_dir + conf_prefix + '-test.pickle'
     with open(train_data_path, 'rb') as f:
         train_data = pickle.load(f)
     with open(val_data_path, 'rb') as f:
@@ -136,9 +135,11 @@ class SQUADBERT(pl.LightningModule):
         loss2 = F.cross_entropy(end_logits, end)
         loss = loss1 + loss2
 
+        self.log('start_loss', loss1, prog_bar=True)
+        self.log('end_loss', loss2, prog_bar=True)
         self.log('loss', loss, prog_bar=True)
         # logs
-        tensorboard_logs = {'train_loss': loss}
+        tensorboard_logs = {'train_loss': loss, 'start_loss' : loss1, 'end_loss' : loss2}
         return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_step(self, batch, batch_nb):

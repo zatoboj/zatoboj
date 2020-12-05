@@ -28,7 +28,7 @@ def train_model(model_conf, train_conf):
     '''
     Create, train and save model using callback.
     '''
-    model_save_dir = model_conf['model_save_dir']
+    model_save_dir = train_conf['model_save_dir']
     model_name = '_'.join([model_conf['model'],
                    model_conf['model_version'],
                    model_conf['unique_name'],
@@ -36,6 +36,7 @@ def train_model(model_conf, train_conf):
                    str(model_conf['batch_size']),
                    str(model_conf['lr']),
                    str(model_conf['freeze_layers'])])
+    log_dir = train_conf['log_dir']
     epochs = train_conf['epochs']
     if os.path.exists(model_save_dir + model_name):
         print('Model already exists, loading trained model...')
@@ -45,7 +46,7 @@ def train_model(model_conf, train_conf):
         print('Creating new model...')
         model = SQUADBERT(model_conf)
         print('Succesfully created new model.')
-
+    # saving checkpoint
     checkpoint_callback = ModelCheckpoint(
         filepath = model_save_dir + model_name,
         save_top_k = 2,
@@ -53,10 +54,9 @@ def train_model(model_conf, train_conf):
         monitor = 'val_loss',
         mode = 'min'
     )
-
-    # default logger used by trainer
+    # logger used by trainer
     logger = TensorBoardLogger(
-        save_dir = train_conf['log_dir'],
+        save_dir = log_dir,
         version=1,
         name='lightning_logs'
     )
@@ -64,13 +64,14 @@ def train_model(model_conf, train_conf):
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     print('Beginning training...')
     trainer = pl.Trainer(
-        gpus=1, 
-        amp_level='O2', 
-        precision=16, 
-        max_epochs=epochs, 
-        val_check_interval=0.25, 
-        checkpoint_callback=checkpoint_callback, 
-        progress_bar_refresh_rate = 25)# accelerator='ddp'   
+        gpus = 1, 
+        amp_level = 'O2', 
+        precision = 16, 
+        max_epochs = epochs, 
+        val_check_interval = 0.25, 
+        checkpoint_callback = checkpoint_callback, 
+        progress_bar_refresh_rate = 25,
+        logger = logger) # accelerator='ddp'   
     trainer.fit(model) 
     print('Finished training.')
 
