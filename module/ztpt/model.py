@@ -13,12 +13,12 @@ from .utils import get_transformer
 def load_data(conf):
     preprocess(conf)
     print('Beginning to load preprocessed data...')
-    base_dir_read = conf['base_dir_read']
-    base_dir_write = conf['base_dir_write']
+    raw_data_dir = conf['raw_data_dir']
+    prep_data_dir = conf['prep_data_dir']
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len']) 
-    train_data_path = base_dir_write + conf_prefix + '-train.pickle'
-    val_data_path = base_dir_write + conf_prefix + '-val.pickle'
-    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
+    train_data_path = prep_data_dir + conf_prefix + '-train.pickle'
+    val_data_path = prep_data_dir + conf_prefix + '-val.pickle'
+    test_data_path = prep_data_dir + conf_prefix + '-test.pickle'
     with open(train_data_path, 'rb') as f:
         train_data = pickle.load(f)
     with open(val_data_path, 'rb') as f:
@@ -47,8 +47,8 @@ def generate_squad_dataloaders(conf):
                                 1 - torch.tensor(train_data['labels'], dtype=torch.long).cuda(), #label is 0 if there is an answer in the original dataset
                                 torch.tensor(train_data['answer_mask'], dtype=torch.long).cuda(),
                                 torch.tensor(train_data['indexing'], dtype=torch.long).cuda(),
-                                #torch.tensor(train_data['answer_starts'], dtype=torch.long).cuda(),
-                                #torch.tensor(train_data['answer_ends'], dtype=torch.long).cuda()
+                                torch.tensor(train_data['answer_starts'], dtype=torch.long).cuda(),
+                                torch.tensor(train_data['answer_ends'], dtype=torch.long).cuda()
                                 )
     # TensorDataset from validation examples.
     squad_val_dataset = TensorDataset(torch.tensor(val_data['input_ids'], dtype=torch.long).cuda(),
@@ -80,7 +80,7 @@ def generate_squad_dataloaders(conf):
 
     # test loader
     test_sampler = RandomSampler(squad_test_dataset)
-    squad_test_dataloader = DataLoader(squad_test_dataset, sampler=test_sampler, batch_size = batch_size)
+    squad_test_dataloader = DataLoader(squad_test_dataset, sampler=test_sampler, batch_size = batch_size, shuffle = False)
 
     return squad_train_dataloader, squad_val_dataloader, squad_test_dataloader 
 

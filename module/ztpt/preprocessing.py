@@ -102,11 +102,11 @@ def preprocess(conf):
     Run all preprocessing steps for 'train-v2.0.json' and 'val-v2.0.json' files if the preprocessing has not already been done for a given configuration.
     '''
     conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len'])   
-    base_dir_read = conf['base_dir_read']
-    base_dir_write = conf['base_dir_write']
+    raw_data_dir = conf['raw_data_dir']
+    prep_data_dir = conf['prep_data_dir']
     # first deal with train data
-    train_input_path = base_dir_read + 'train-v2.0.json'
-    train_data_path = base_dir_write + conf_prefix + '-train.pickle'
+    train_input_path = raw_data_dir + 'train-v2.0.json'
+    train_data_path = prep_data_dir + conf_prefix + '-train.pickle'
     if os.path.exists(train_data_path):
         print(f'Preprocessed train data already exist as {train_data_path}.')
     else:               
@@ -121,9 +121,9 @@ def preprocess(conf):
             pickle.dump(train_data, f)
         print(f'Preprocessed train data succesfully saved as {train_data_path}.')
     # now deal with val/test data (20%/80% split of 'dev-v2.0.json' file)
-    dev_input_path = base_dir_read + 'dev-v2.0.json'
-    val_data_path = base_dir_write + conf_prefix + '-val.pickle'
-    test_data_path = base_dir_write + conf_prefix + '-test.pickle'
+    dev_input_path = raw_data_dir + 'dev-v2.0.json'
+    val_data_path = prep_data_dir + conf_prefix + '-val.pickle'
+    test_data_path = prep_data_dir + conf_prefix + '-test.pickle'
     if os.path.exists(val_data_path) and os.path.exists(test_data_path):
         print(f'Preprocessed validation and test data already exists as {val_data_path} and {test_data_path}.')
     else:
