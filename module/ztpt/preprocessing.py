@@ -33,7 +33,7 @@ def organize_raw_data(input_data: list) -> list:
     preprocessed_data = shuffle(preprocessed_data, random_state=420)
     return preprocessed_data
 
-def tokenize_data(preprocessed_data: list, conf: dict) -> dict:
+def tokenize_data(preprocessed_data: list, model_conf: dict) -> dict:
     '''
     Tokenize data that was organized in a list ot tuples using tokenizer coming from configuration. Return data as a dictionary (see the dictionary structure at the end of this function).
     '''
@@ -41,8 +41,8 @@ def tokenize_data(preprocessed_data: list, conf: dict) -> dict:
     attention_mask, answer_mask, plausible_answer_mask = [], [], []
     full_questions, actual_answers, full_paragraphs, plausible_answers = [], [], [], []
     answer_starts, answer_ends = [], []
-    max_len = conf['max_len']
-    tokenizer = get_tokenizer(conf)
+    max_len = model_conf['max_len']
+    tokenizer = get_tokenizer(model_conf)
 
     print('Beginning to tokenize data...')
     for step in tqdm_notebook(preprocessed_data):
@@ -97,17 +97,20 @@ def tokenize_data(preprocessed_data: list, conf: dict) -> dict:
         }
     return dict_data
 
-def preprocess(conf):
+def preprocess(model_conf):
     '''
     Run all preprocessing steps for 'train-v2.0.json' and 'val-v2.0.json' files if the preprocessing has not already been done for a given configuration.
     '''
-    conf_prefix = conf['model'] + '-' + conf['model_version'] + '-' + str(conf['max_len'])   
-    data_dir = conf['data_dir']
+    conf_prefix = model_conf['transformer'] + '-' + model_conf['transformer_version'] + '-' + str(model_conf['max_len'])   
+    data_dir = model_conf['data_dir']
+    if not os.path.exists(data_dir):
+        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a datasets folder ('datasets'). Be a good boy, copy shared datasets folder into root directory.")
+
     # first deal with train data
     train_input_path = data_dir + 'train-v2.0.json'
     train_data_path = data_dir + conf_prefix + '-train.pickle'
     if os.path.exists(train_data_path):
-        print(f'Preprocessed train data already exist as {train_data_path}.')
+        print(f'Preprocessed train data already exist at {train_data_path}.')
     else:               
         if os.path.exists(train_input_path):
             with open(train_input_path, "r") as reader:
@@ -115,27 +118,27 @@ def preprocess(conf):
         else:
             raise ValueError(f'Input train data file {train_input_path} does not exist. Please, upload the file to the folder.')   
         train_data = organize_raw_data(train_data)
-        train_data = tokenize_data(train_data, conf)
+        train_data = tokenize_data(train_data, model_conf)
         with open(train_data_path, 'wb') as f:
             pickle.dump(train_data, f)
-        print(f'Preprocessed train data succesfully saved as {train_data_path}.')
+        print(f'Preprocessed train data succesfully saved at {train_data_path}.')
     # now deal with val/test data (20%/80% split of 'dev-v2.0.json' file)
     dev_input_path = data_dir + 'dev-v2.0.json'
     val_data_path = data_dir + conf_prefix + '-val.pickle'
     test_data_path = data_dir + conf_prefix + '-test.pickle'
     if os.path.exists(val_data_path) and os.path.exists(test_data_path):
-        print(f'Preprocessed validation and test data already exists as {val_data_path} and {test_data_path}.')
+        print(f'Preprocessed validation and test data already exists at {val_data_path} and {test_data_path}.')
     else:
         if os.path.exists(dev_input_path):
             with open(dev_input_path, "r") as reader:
                 dev_data = json.load(reader)["data"]
         else:
             raise ValueError(f'Input dev data file {dev_input_path} does not exist. Please, upload the file to the folder.')
-        val_data, test_data = train_test_split(dev_data, test_size=0.8, random_state=420)
+        val_data, test_data = train_test_split(dev_data, test_size=0.5, random_state=420)
         val_data, test_data = organize_raw_data(val_data), organize_raw_data(test_data)
-        val_data, test_data = tokenize_data(val_data, conf), tokenize_data(test_data, conf)
+        val_data, test_data = tokenize_data(val_data, model_conf), tokenize_data(test_data, model_conf)
         with open(val_data_path, 'wb') as f:
             pickle.dump(val_data, f)
         with open(test_data_path, 'wb') as f:
             pickle.dump(test_data, f)
-        print(f'Preprocessed validation and test data succesfully saved as {val_data_path} and {test_data_path}.')
+        print(f'Preprocessed validation and test data succesfully saved at {val_data_path} and {test_data_path}.')

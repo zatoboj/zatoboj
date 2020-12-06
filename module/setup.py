@@ -12,7 +12,7 @@ setup(
     description="Training and fine-tuning transformer-based neural network to perform on SQuAD dataset",
     long_description=readfile("README.md"), # get the long description from the README
     url="https://github.com/zatoboj/zatoboj",
-    install_requires=['transformers==3.5.0','pytorch-lightning','torch==1.7.0'],
+    install_requires=['transformers==3.5.0','pytorch-lightning','torch==1.7.0','wandb'],
     author="Efim Abrikosov, Eduard Duryev, Matvey Kolbasov, Leonid Monin, Petr Pushkar, Alexey Savchik, Anton Osinenko",
     author_email="edwardduriev@gmail.com",
     license="MIT",
