@@ -103,7 +103,8 @@ def train_model(model_conf):
         checkpoint_callback = checkpoint_callback, 
         progress_bar_refresh_rate = 25,
         logger = [tb_logger,wandb_logger],
-        resume_from_checkpoint = resume_from_checkpoint) 
+        resume_from_checkpoint = resume_from_checkpoint,
+        limit_test_batches = model_conf['limit_test_batches']) 
     # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')
     # wandb.save('EarlyStoppingADam-32-0.001.pth')   
     trainer.fit(model) 
