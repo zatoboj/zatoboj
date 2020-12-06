@@ -85,8 +85,8 @@ def generate_squad_dataloaders(model_conf):
 
     return squad_train_dataloader, squad_val_dataloader, squad_test_dataloader 
 
-def create_model(model_conf):
-    model_save_dir = train_conf['model_save_dir']
+def create_model(model_conf, loading = False):
+    model_save_dir = model_conf['model_save_dir']
     if not os.path.exists(model_save_dir):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a good boy, copy shared saved models folder into root directory.")
     model_name = '_'.join([model_conf['transformer'],
@@ -96,10 +96,10 @@ def create_model(model_conf):
                    str(model_conf['max_len']),
                    str(model_conf['batch_size']),
                    str(model_conf['lr']),
-                   str(model_conf['freeze_layers']),
-                   str(train_conf['epochs'])])
+                   str(model_conf['freeze_layers'])
+                   ])
     model_path = model_save_dir + model_name + '.ckpt'
-    if not os.path.exists(model_path):       
+    if not os.path.exists(model_path) or loading:       
         batch_size = model_conf['batch_size']       
         max_len = model_conf['max_len']
         freeze_layers = model_conf['freeze_layers']
@@ -199,7 +199,7 @@ class SQUADBERT(pl.LightningModule):
         EM_acc = torch.logical_and(y1 == start, y2 == end).sum() / self.batch_size
         
         # logs
-        self.log('val_loss', avg_loss, prog_bar=True)
+        self.log('val_loss', loss, prog_bar=True)
         self.log('start_acc', start_acc, prog_bar=True)
         self.log('end_acc', end_acc, prog_bar=True)
         self.log('EM_acc', EM_acc, prog_bar=True)
