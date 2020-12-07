@@ -99,7 +99,7 @@ def train_model(model_conf):
         amp_level = 'O2', 
         precision = 16, 
         max_epochs = model_conf['epochs'], 
-        val_check_interval = 0.1, 
+        val_check_interval = model_conf['val_check_interval'], 
         checkpoint_callback = checkpoint_callback, 
         progress_bar_refresh_rate = 25,
         logger = [tb_logger,wandb_logger],
