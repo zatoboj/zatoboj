@@ -124,29 +124,30 @@ class SQUADBERT(pl.LightningModule):
         self.lr = lr
         # initializing BERT
         self.bert = get_transformer(model_conf).cuda()
-        self.n = self.bert.config.hidden_size
+        self.bert_dim = self.bert.config.hidden_size
         # initializing dataloaders
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.model_conf)
         # initializing additional layers -- start and end vectors
-        self.Start = nn.Linear(self.n, 1)
-        self.End = nn.Linear(self.n, 1)
+        self.Start = nn.Linear(self.bert_dim, 1)
+        self.End = nn.Linear(self.bert_dim, 1)
         # save hyperparameters for .hparams attribute
         self.save_hyperparameters()
 
-    def new_layers(self, q, new_layer):
-        logits_wrong_shape = new_layer(torch.reshape(q, (q.shape[0]*q.shape[1], q.shape[2])))
-        logits = torch.reshape(logits_wrong_shape, (q.shape[0], q.shape[1]))
+    def new_layers(self, bert_output, new_layer):
+        logits_wrong_shape = new_layer(torch.reshape(bert_output, (bert_output.shape[0]*bert_output.shape[1], bert_output.shape[2])))
+        logits = torch.reshape(logits_wrong_shape, (bert_output.shape[0], bert_output.shape[1]))
         return logits
 
     def forward(self, input_ids, attention_mask, token_type_ids):
         #apply BERT
-        q, _ = self.bert(input_ids=input_ids, 
+        # _ should be used for classification answer/no answer
+        bert_output, _ = self.bert(input_ids=input_ids, 
                          attention_mask=attention_mask, 
                          token_type_ids=token_type_ids)
         # shape of q will be (batch_size, max_len, bert_dim) = (batch_size, 256, 768)
         # take inner products of output vectors with trainable start and end vectors
-        start_logits = self.new_layers(q, self.Start)
-        end_logits = self.new_layers(q, self.End)
+        start_logits = self.new_layers(bert_output, self.Start)
+        end_logits = self.new_layers(bert_output, self.End)
 
         return start_logits, end_logits
 
@@ -159,12 +160,10 @@ class SQUADBERT(pl.LightningModule):
         start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
         
         # LOSS
-        # get start and end positions from answer_mask
-        start, end = answer_starts, answer_ends#get_start_end(answer_mask)
 
         # compute cross_entropy loss between predictions and actual labels for start and end 
-        start_loss = F.cross_entropy(start_logits, start)
-        end_loss = F.cross_entropy(end_logits, end)
+        start_loss = F.cross_entropy(start_logits, answer_starts)
+        end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
 
         # logs
@@ -182,21 +181,20 @@ class SQUADBERT(pl.LightningModule):
         start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
 
         # loss
-        start, end = answer_starts, answer_ends#get_start_end(answer_mask)
 
-        loss1 = F.cross_entropy(start_logits, start)
-        loss2 = F.cross_entropy(end_logits, end)
+        loss1 = F.cross_entropy(start_logits, answer_starts)
+        loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
 
         # ^^^^ the code above is the same as for training step, but we also add accuracy computation for validation below
 
         # acc
-        a, y1 = torch.max(start_logits, dim=1)
-        a, y2 = torch.max(end_logits, dim=1)
+        _, start_preds = torch.max(start_logits, dim=1)
+        _, end_preds = torch.max(end_logits, dim=1)
         
-        start_acc = torch.sum(y1 == start) / self.batch_size
-        end_acc = torch.sum(y2 == end) / self.batch_size
-        EM_acc = torch.logical_and(y1 == start, y2 == end).sum() / self.batch_size
+        start_acc = torch.sum(start_preds == answer_starts) / self.batch_size
+        end_acc = torch.sum(end_preds == answer_ends) / self.batch_size
+        EM_acc = torch.logical_and(start_preds == answer_starts, end_preds == answer_ends).sum() / self.batch_size
         
         # logs
         self.log('val_loss', loss, prog_bar=True)
