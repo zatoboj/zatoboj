@@ -104,7 +104,7 @@ def create_model(model_conf, loading = False):
         max_len = model_conf['max_len']
         freeze_layers = model_conf['freeze_layers']
         lr = model_conf['lr']
-        models_dict = {'SQUADBERT' : SQUADBERT}
+        models_dict = {'SQUADBERT' : SQUADBERT, 'SOMENAME' : SOMENAME}
         model_class = models_dict[model_conf['model']]
         model = model_class(batch_size, max_len, freeze_layers, lr, model_conf)
         return model
@@ -226,3 +226,5 @@ class SQUADBERT(pl.LightningModule):
     def val_dataloader(self):
         return self.squad_val_dataloader
 
+class SOMENAME:
+    pass
