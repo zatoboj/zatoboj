@@ -76,11 +76,11 @@ def generate_squad_dataloaders(model_conf):
     squad_train_dataloader = DataLoader(squad_train_dataset, sampler = train_sampler, batch_size = batch_size)
 
     # val loader
-    val_sampler = RandomSampler(squad_val_dataset)
+    val_sampler = SequentialSampler(squad_val_dataset)
     squad_val_dataloader = DataLoader(squad_val_dataset, sampler = val_sampler, batch_size = batch_size, shuffle = False)
 
     # test loader
-    test_sampler = RandomSampler(squad_test_dataset)
+    test_sampler = SequentialSampler(squad_test_dataset)
     squad_test_dataloader = DataLoader(squad_test_dataset, sampler=test_sampler, batch_size = batch_size, shuffle = False)
 
     return squad_train_dataloader, squad_val_dataloader, squad_test_dataloader 
