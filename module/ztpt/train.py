@@ -28,7 +28,7 @@ def load_model(model_conf=None):
         checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
         model.load_state_dict(checkpoint['state_dict'])
     else:
-        raise ValueError(f'Model {model_name} does not exist.')
+        raise ValueError(f'Model {model_name}.ckpt does not exist.')
     return model
 
 def train_model(model_conf):

@@ -24,7 +24,7 @@ def predict(model, batch):
     start_prob, end_prob = numpify(start_prob, end_prob)
     return start_prob, end_prob
 
-def convert_predictions_dumb(start_prob, end_prob):
+def convert_predictions_plain(start_prob, end_prob):
     '''
     Return numpy arrays of predictions of indices of starts and ends
     as argmax of unnormalized probability vectors.
@@ -33,7 +33,7 @@ def convert_predictions_dumb(start_prob, end_prob):
     end_pred = np.argmax(end_prob, axis=1)
     return start_pred, end_pred
 
-def convert_predictions_smart(start_prob, end_prob, min_start=None):
+def convert_predictions_bysum(start_prob, end_prob, min_start=None):
     '''
     Return numpy arrays of predictions of indices of starts and ends
     as argmax of the sum of unrromalized probabilities over all pairs (i,j) such that i<j (and i>min_start if given).
@@ -56,14 +56,47 @@ def convert_predictions_smart(start_prob, end_prob, min_start=None):
     start_pred, end_pred = np.unravel_index(max_probs, (max_len, max_len)) # two arrays of shape: (batch_size,), 'unflattenning' of max_probs
     return start_pred, end_pred
 
-def get_stats_on_batch(model, batch, with_min_start = True):
+def convert_predictions_byend(start_prob, end_prob, min_start=None):
+    '''
+    Return numpy arrays of predictions of indices of starts and ends
+    as argmax of unrromalized probabilities over all i>min_start for end and
+    as argmax of unrromalized probabilities over all min_start<j<end_pred for start
+    '''
+    neg_inf = -100
+    batch_size, max_len = start_prob.shape
+    # first we deal with ends
+    if min_start is not None:
+        mask = np.zeros(end_prob.shape)  # create a mask to avoid including cases where end > min_start
+        for i,s in enumerate(min_start):
+            mask[i,:s] = 1
+        mask[:,0] = 0               # we however leave end=0 to detect questions without answers
+        end_prob = np.ma.array(end_prob,mask=mask)
+        start_prob = np.ma.array(start_prob,mask=mask)
+        end_prob = np.ma.filled(end_prob,neg_inf)
+        start_prob = np.ma.filled(start_prob,neg_inf)
+    end_pred = np.argmax(end_prob, axis=-1) # array of shape: (batch_size,), argmaxes of ends' probabilities
+    # now we deal with starts
+    mask = np.zeros(start_prob.shape)  # create a mask to avoid including cases where end > min_start
+    for i,e in enumerate(end_pred):
+        mask[i,e+1:] = 1
+    start_prob = np.ma.array(start_prob,mask=mask)
+    start_prob = np.ma.filled(start_prob,neg_inf)
+    start_pred = np.argmax(start_prob, axis=-1) # array of shape: (batch_size,), argmaxes of starts' probabilities
+    return start_pred, end_pred
+
+def get_stats_on_batch(model, batch, with_min_start = True, metrics = ['plain','bysum','byend']):
     start_prob, end_prob = predict(model, batch)
     input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = numpify(*batch)
     batch_size = input_ids.shape[0]
-    if with_min_start: 
-        min_start = np.argmax(token_type_ids, axis=1)
-    else:
-        min_start = None
+    if with_min_start: min_start = np.argmax(token_type_ids, axis=1)
+    else: min_start = None
+
+    metric2convert = {
+        'plain' : convert_predictions_plain, 
+        'bysum' : convert_predictions_bysum,
+        'byend' : convert_predictions_byend
+        }
+
     # batch info
     d = {}
     d['num_examples'] = batch_size
@@ -75,69 +108,48 @@ def get_stats_on_batch(model, batch, with_min_start = True):
     d['start_probs'] = start_prob
     d['end_probs'] = end_prob
 
-    # convert mode 'dumb'
-    start_pred, end_pred = convert_predictions_dumb(start_prob, end_prob)
-    label_pred = np.zeros(batch_size)
-    label_pred[start_pred!=0] = 1 
-    d['guessed_starts_dumb'] = np.sum(answer_starts == start_pred)
-    d['guessed_ends_dumb'] = np.sum(answer_ends == end_pred)
-    d['exact_matches_dumb'] = np.sum((answer_starts == start_pred) & (answer_ends == end_pred))
-    d['predicted_label_dumb'] = start_pred
-    d['predicted_label_dumb'] = end_pred
-    d['predicted_label_dumb'] = label_pred
-    d['guessed_labels_dumb'] = np.sum(label == label_pred)
-
-    # convert mode 'smart'
-    start_pred, end_pred = convert_predictions_smart(start_prob, end_prob, min_start=min_start)
-    label_pred = np.zeros(batch_size)
-    label_pred[start_pred!=0] = 1 
-    d['guessed_starts_smart'] = np.sum(answer_starts == start_pred)
-    d['guessed_ends_smart'] = np.sum(answer_ends == end_pred)
-    d['exact_matches_smart'] = np.sum((answer_starts == start_pred) & (answer_ends == end_pred))
-    d['predicted_label_smart'] = start_pred
-    d['predicted_label_smart'] = end_pred
-    d['predicted_label_smart'] = label_pred
-    d['guessed_labels_smart'] = np.sum(label == label_pred)
+    for metric in metrics:
+        start_pred, end_pred = metric2conver[metric](start_prob, end_prob)
+        label_pred = np.zeros(batch_size)
+        label_pred[start_pred!=0] = 1 
+        d[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
+        d[f'guessed_ends_{metric}'] = np.sum(answer_ends == end_pred)
+        d[f'guessed_labels_{metric}'] = np.sum(label == label_pred)
+        d[f'exact_matches_{metric}'] = np.sum((answer_starts == start_pred) & (answer_ends == end_pred))        
+        d[f'predicted_start_{metric}'] = start_pred
+        d[f'predicted_end_{metric}'] = end_pred
+        d[f'predicted_label_{metric}'] = label_pred
 
     return d
 
-def evaluate(model, data_mode='val', verbose=True, with_min_start=True):
+def evaluate(model, data_mode = 'val', with_min_start = True, metrics = ['plain','bysum','byend'], verbose = True):
     # choose dataloader
     if data_mode == 'train':
         data = model.train_dataloader()
     elif data_mode == 'val':
         data = model.val_dataloader()
 
-    results = {
-            'num_examples' : 0,
-            'guessed_starts_dumb' : 0,
-            'guessed_ends_dumb' : 0,
-            'exact_matches_dumb' : 0,
-            'guessed_labels_dumb' : 0,
-            'guessed_starts_smart' : 0,
-            'guessed_ends_smart' : 0,
-            'exact_matches_smart' : 0.,
-            'guessed_labels_smart' : 0
-        }
-
-    accuracy = {}
+    results = {'num_examples' : 0}
+    for metric in metrics:
+        results[f'guessed_starts_{metric}'] = 0
+        results[f'guessed_ends_{metric}'] = 0
+        results[f'exact_matches_{metric}'] = 0
+        results[f'guessed_labels_{metric}'] = 0
 
     # iterate over batches
     for batch_id, batch in tqdm(list(enumerate(data))):
-        batch_stats = get_stats_on_batch(model, batch, with_min_start=with_min_start)
+        batch_stats = get_stats_on_batch(model, batch, with_min_start = with_min_start, metrics = metrics)
         for key in results.keys():
             results[key] += batch_stats[key]
-    accuracy['EM_acc_dumb'] = results['exact_matches_dumb'] / results['num_examples']
-    accuracy['EM_acc_smart'] = results['exact_matches_smart'] / results['num_examples']
-    accuracy['start_acc_dumb'] = results['guessed_starts_dumb'] / results['num_examples']
-    accuracy['start_acc_smart'] = results['guessed_starts_smart'] / results['num_examples']
-    accuracy['end_acc_dumb'] = results['guessed_ends_dumb'] / results['num_examples']
-    accuracy['end_acc_smart'] = results['guessed_ends_smart'] / results['num_examples']
-    accuracy['label_acc_dumb'] = results['guessed_labels_dumb'] / results['num_examples']
-    accuracy['label_acc_smart'] = results['guessed_labels_smart'] / results['num_examples']
-    accuracy['num_examples'] = results['num_examples']
+    
+    accuracy = {'num_examples' : 0}
+    for metric in metrics:
+        accuracy[f'EM_acc_{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
+        accuracy[f'start_acc_{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
+        accuracy[f'end_acc_{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
+        accuracy[f'label_acc_{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+    
     if verbose:
         print(f'Evaluation results for with_min_start={with_min_start}:')
         pprint(accuracy)
     return results, accuracy
-

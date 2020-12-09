@@ -111,8 +111,6 @@ def create_model(model_conf, loading = False):
     else:
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to the key 'unique_name' in the model configuration.")
 
-
-
 class SQUADBERT(pl.LightningModule):
     def __init__(self, batch_size, max_len, freeze_layers, lr, model_conf):
         super(SQUADBERT, self).__init__()    

@@ -1,4 +1,4 @@
-cd /content/gdrive/MyDrive/ybshmmlchk/zatoboj
+cd /content/gdrive/My\ Drive/ybshmmlchk/zatoboj
 mkdir -p ~/.ssh
 cp ../id_rsa ~/.ssh
 ssh-keyscan -t rsa github.com >> /root/.ssh/known_hosts
