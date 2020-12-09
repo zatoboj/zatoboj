@@ -43,73 +43,81 @@ def convert_predictions_smart(start_prob, end_prob, min_start=None):
     starts, ends = np.unravel_index(max_probs, (max_len, max_len)) # two arrays of shape: (batch_size,), 'unflattenning' of max_probs
     return start_pred, end_pred
 
-def get_stats_on_batch(model, batch, convert_mode = 'smart'):
+def get_stats_on_batch(model, batch):
     start_prob, end_prob = predict(model, batch)
     input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = numpify(batch)
-    d['batch_size'] = input_ids.shape[0]
-
-    if convert_mode == 'dumb':
-        strat_pred, end_pred = convert_predictions_dumb(strat_prob, end_prob)
-        d['num_starts_guessed_dumb'] = np.sum(answer_starts == start_pred)
-        d['num_ends_guessed_dumb'] = np.sum(answer_ends == end_pred)
-        d['num_exact_matches_dumb'] = np.sum(((answer_starts == start_pred) & (answer_ends == end_pred))
-    elif convert_mode == 'smart':
-        strat_pred, end_pred = convert_predictions_smart(strat_prob, end_prob)
-        d['num_starts_guessed_smart'] = np.sum(answer_starts == start_pred)
-        d['num_ends_guessed_smart'] = np.sum(answer_ends == end_pred)
-        d['num_exact_matches_smart'] = np.sum(((answer_starts == start_pred) & (answer_ends == end_pred))
-    
-    
-    
+    batch_size = input_ids.shape[0]
     min_start = np.argmax(token_type_ids, axis=1)
 
-    predicted_label = predicted_start.copy().astype(int)
-    predicted_label[predicted_label!=0] = 1 
-    label = npf(label).astype(int)
-    # d['num_labels_guessed'] = np.sum(label == predicted_label)
-    # d['predicted_start'] = predicted_start
-    # d['predicted_end'] = predicted_end
-    # d['predicted_label'] = predicted_label
-    # d['actual_start'] = answer_starts
-    # d['actual_end'] = answer_ends
-    # d['actual_label'] = label
-    # d['input_ids'] = input_ids
-    # d['indexing'] = indexing
-    # d['start_probs'] = l1
-    # d['end_probs'] = l2
+    # batch info
+    d['num_examples'] = batch_size
+    d['actual_start'] = answer_starts
+    d['actual_end'] = answer_ends
+    d['actual_label'] = label
+    d['input_ids'] = input_ids
+    d['indexing'] = indexing
+    d['start_probs'] = start_probs
+    d['end_probs'] = end_probs
+
+    # convert mode 'dumb'
+    start_pred, end_pred = convert_predictions_dumb(start_prob, end_prob)
+    label_pred = np.zeros(batch_size)
+    label_pred[start_pred!=0] = 1 
+    d['guessed_starts_dumb'] = np.sum(answer_starts == start_pred)
+    d['guessed_ends_dumb'] = np.sum(answer_ends == end_pred)
+    d['exact_matches_dumb'] = np.sum(((answer_starts == start_pred) & (answer_ends == end_pred))
+    d['predicted_label_dumb'] = start_pred
+    d['predicted_label_dumb'] = end_pred
+    d['predicted_label_dumb'] = label_pred
+    d['guessed_labels_dumb'] = np.sum(label == label_pred)
+
+    # convert mode 'smart'
+    start_pred, end_pred = convert_predictions_smart(start_prob, end_prob, min_start)
+    label_pred = np.zeros(batch_size)
+    label_pred[start_pred!=0] = 1 
+    d['guessed_starts_smart'] = np.sum(answer_starts == start_pred)
+    d['guessed_ends_smart'] = np.sum(answer_ends == end_pred)
+    d['exact_matches_smart'] = np.sum(((answer_starts == start_pred) & (answer_ends == end_pred))
+    d['predicted_label_smart'] = start_pred
+    d['predicted_label_smart'] = end_pred
+    d['predicted_label_smart'] = label_pred
+    d['guessed_labels_smart'] = np.sum(label == label_pred)
+
     return d
 
 def add_dicts(d1, d2):
-  for key in set(d1.keys()).intersection(set(d2.keys())):
-    d1[key]+=d2[key]
-  return d1
+    for key in set(d1.keys()).intersection(set(d2.keys())):
+        d1[key]+=d2[key]
+    return d1
 
-def validate(model, s = 'val'):
-  # choose the right dataloader
-  if s == 'train':
-    a = (model.train_dataloader())
-  else:
-    a = (model.val_dataloader())
+def validate(model, mode = 'val', verbose = True):
+    # choose the right dataloader
+    if mode == 'train':
+        data = model.train_dataloader()
+    elif mode == 'val':
+        data = model.val_dataloader()
 
-  d = {
-        'num_examples' : 0,
-        'num_starts_guessed' : 0,
-        'num_ends_guessed' : 0,
-        'num_exact_matches_guessed' : 0,
-        'num_starts_guessed_post' : 0,
-        'num_ends_guessed_post' : 0,
-        'num_exact_matches_guessed_post' : 0.,
-        'num_labels_guessed' : 0
-      }
+    results = {
+            'num_examples' : 0,
+            'guessed_starts_dumb' : 0,
+            'guessed_ends_dumb' : 0,
+            'exact_matches_dumb' : 0,
+            'guessed_labels_dumb' : 0,
+            'guessed_starts_smart' : 0,
+            'guessed_ends_smart' : 0,
+            'exact_matches_smart' : 0.,
+            'guessed_labels_smart' : 0
+        }
 
-  # iterate over batches
-  for batch_ndx, batch in enumerate(a):
-    batch_stats = get_stats_on_batch(model, batch)
-    d = add_dicts(d, batch_stats)
-    d['EM'] = d['num_exact_matches_guessed'] / d['num_examples']
-    d['EM post'] = d['num_exact_matches_guessed_post'] / d['num_examples']
-    if batch_ndx%300 == 0:
-      print(batch_ndx)
-      pprint(d)
-  return d
+    # iterate over batches
+    for batch_id, batch in enumerate(data):
+        batch_stats = get_stats_on_batch(model, batch)
+        for key in results.keys():
+            results[key] += batch_stats[key]
+        results['EM_acc_dumb'] = d['num_exact_matches_guessed'] / d['num_examples']
+        d['EM_acc_smart'] = d['num_exact_matches_guessed_post'] / d['num_examples']
+        if verbose and batch_id%250 == 0:
+            print(batch_id)
+            pprint(d)
+    return d
 
