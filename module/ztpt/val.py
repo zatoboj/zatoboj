@@ -136,10 +136,10 @@ def evaluate_on_batch(model, batch, metrics = ['plain','bysum','byend']):
     
     accuracy = {'num_examples' : 0}
     for metric in metrics:
-        accuracy[f'EM_acc_{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
-        accuracy[f'start_acc_{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
-        accuracy[f'end_acc_{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
-        accuracy[f'label_acc_{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+        accuracy[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
+        accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
+        accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
+        accuracy[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
 
     return results, accuracy
     
@@ -166,10 +166,10 @@ def evaluate(model, data_mode = 'val', with_min_start = True, metrics = ['plain'
     
     accuracy = {'num_examples' : 0}
     for metric in metrics:
-        accuracy[f'EM_acc_{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
-        accuracy[f'start_acc_{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
-        accuracy[f'end_acc_{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
-        accuracy[f'label_acc_{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+        accuracy[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
+        accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
+        accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
+        accuracy[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
     
     if verbose:
         print(f'Evaluation results for with_min_start={with_min_start}:')
