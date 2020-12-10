@@ -109,7 +109,7 @@ def get_stats_on_batch(model, batch, with_min_start = True, metrics = ['plain','
     d['end_probs'] = end_prob
 
     for metric in metrics:
-        start_pred, end_pred = metric2conver[metric](start_prob, end_prob)
+        start_pred, end_pred = metric2convert[metric](start_prob, end_prob)
         label_pred = np.zeros(batch_size)
         label_pred[start_pred!=0] = 1 
         d[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
@@ -121,6 +121,28 @@ def get_stats_on_batch(model, batch, with_min_start = True, metrics = ['plain','
         d[f'predicted_label_{metric}'] = label_pred
 
     return d
+
+def evaluate_on_batch(model, batch, metrics = ['plain','bysum','byend']):
+    results = {'num_examples' : 0}
+    for metric in metrics:
+        results[f'guessed_starts_{metric}'] = 0
+        results[f'guessed_ends_{metric}'] = 0
+        results[f'exact_matches_{metric}'] = 0
+        results[f'guessed_labels_{metric}'] = 0
+
+    batch_stats = get_stats_on_batch(model, batch, metrics = metrics)
+    for key in results.keys():
+        results[key] += batch_stats[key]
+    
+    accuracy = {'num_examples' : 0}
+    for metric in metrics:
+        accuracy[f'EM_acc_{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
+        accuracy[f'start_acc_{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
+        accuracy[f'end_acc_{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
+        accuracy[f'label_acc_{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+
+    return results, accuracy
+    
 
 def evaluate(model, data_mode = 'val', with_min_start = True, metrics = ['plain','bysum','byend'], verbose = True):
     # choose dataloader
@@ -152,4 +174,5 @@ def evaluate(model, data_mode = 'val', with_min_start = True, metrics = ['plain'
     if verbose:
         print(f'Evaluation results for with_min_start={with_min_start}:')
         pprint(accuracy)
+        
     return results, accuracy

@@ -102,7 +102,7 @@ def train_model(model_conf):
         val_check_interval = model_conf['val_check_interval'], 
         checkpoint_callback = checkpoint_callback, 
         progress_bar_refresh_rate = 25,
-        logger = [tb_logger,wandb_logger],
+        logger = [tb_logger, wandb_logger],
         resume_from_checkpoint = resume_from_checkpoint,
         limit_train_batches = model_conf['limit_train_batches']) 
     # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')

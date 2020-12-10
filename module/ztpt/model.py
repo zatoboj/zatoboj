@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
 from .preprocessing import preprocess
 from .utils import get_transformer
+from .val import evaluate_on_batch
 
 def load_data(model_conf):
     preprocess(model_conf)
@@ -186,33 +187,20 @@ class SQUADBERT(pl.LightningModule):
 
         # ^^^^ the code above is the same as for training step, but we also add accuracy computation for validation below
 
-        # acc
-        _, start_preds = torch.max(start_logits, dim=1)
-        _, end_preds = torch.max(end_logits, dim=1)
-        
-        start_acc = torch.sum(start_preds == answer_starts) / self.batch_size
-        end_acc = torch.sum(end_preds == answer_ends) / self.batch_size
-        EM_acc = torch.logical_and(start_preds == answer_starts, end_preds == answer_ends).sum() / self.batch_size
-        
+        _, accuracy_dict = evaluate_on_batch(self, batch, metrics = ['plain','bysum','byend'])
+    
         # logs
         self.log('val_loss', loss, prog_bar=True)
-        self.log('start_acc', start_acc, prog_bar=True)
-        self.log('end_acc', end_acc, prog_bar=True)
-        self.log('EM_acc', EM_acc, prog_bar=True)
-        return {'val_loss' : loss, 'start_acc' : start_acc, 'end_acc' : end_acc, 'EM_acc' : EM_acc}
-
-    def validation_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        start_acc = torch.stack([x['start_acc'] for x in outputs]).mean()
-        end_acc = torch.stack([x['end_acc'] for x in outputs]).mean()
-        EM_acc = torch.stack([x['EM_acc'] for x in outputs]).mean()
         
-        self.log('val_loss', avg_loss, prog_bar=True)
-        self.log('start_acc', start_acc, prog_bar=True)
-        self.log('end_acc', end_acc, prog_bar=True)
-        self.log('EM_acc', EM_acc, prog_bar=True)
+        return accuracy_dict
 
-    
+    def validation_epoch_end(self, val_step_outputs):
+        log_dict = {}
+        for key in log_dict:
+            aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
+            log_dict[key] = aggregated
+        self.log_dict(log_dict, prog_bar=True)
+
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
 
