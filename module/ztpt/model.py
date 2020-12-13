@@ -10,48 +10,40 @@ from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, Da
 from .utils import get_transformer
 from .val import evaluate_on_batch
 
-def create_model(model_conf, loading = False):
-    model_save_dir = model_conf['model_save_dir']
+def create_model(config, loading = False):
+    model_save_dir = config.dirs.saved_models
     if not os.path.exists(model_save_dir):
-        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a good boy, copy shared saved models folder into root directory.")
-    model_name = '_'.join([model_conf['transformer'],
-                   model_conf['transformer_version'],
-                   model_conf['model_class'],
-                   model_conf['unique_name'],
-                   str(model_conf['max_len']),
-                   str(model_conf['batch_size']),
-                   str(model_conf['lr']),
-                   str(model_conf['freeze_layers'])
-                   ])
+        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
+    model_name = config.model.name
     model_path = model_save_dir + model_name + '/model.ckpt'
     if not os.path.exists(model_path) or loading: 
         if not os.path.exists(model_save_dir + model_name): 
             os.mkdir(model_save_dir + model_name)     
-        batch_size = model_conf['batch_size']       
-        max_len = model_conf['max_len']
-        freeze_layers = model_conf['freeze_layers']
-        lr = model_conf['lr']
+        batch_size = config.model.batch_size   
+        max_len = config.model.max_len
+        freeze_layers = config.model.freeze_layers
+        lr = config.model.lr
         models_dict = {'SQUADBERT' : SQUADBERT, 'SOMENAME' : SOMENAME}
-        model_class = models_dict[model_conf['model_class']]
-        model = model_class(batch_size, max_len, freeze_layers, lr, model_conf)
+        model_class = models_dict[config.model.model]
+        model = model_class(batch_size, max_len, freeze_layers, lr, config)
         return model
     else:
-        raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to the key 'unique_name' in the model configuration.")
+        raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
 
 class SQUADBERT(pl.LightningModule):
-    def __init__(self, batch_size, max_len, freeze_layers, lr, model_conf):
+    def __init__(self, batch_size, max_len, freeze_layers, lr, config):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
-        self.model_conf = model_conf
+        self.config = config
         self.batch_size = batch_size     
         self.max_len = max_len
         self.freeze_layers = freeze_layers
         self.lr = lr
         # initializing BERT
-        self.bert = get_transformer(model_conf).cuda()
+        self.bert = get_transformer(config).cuda()
         self.bert_dim = self.bert.config.hidden_size
         # initializing dataloaders
-        self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.model_conf)
+        self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
         # initializing additional layers -- start and end vectors
         self.Start = nn.Linear(self.bert_dim, 1)
         self.End = nn.Linear(self.bert_dim, 1)
@@ -139,12 +131,12 @@ class SQUADBERT(pl.LightningModule):
 class SOMENAME:
     pass
 
-def generate_squad_dataloaders(model_conf):
+def generate_squad_dataloaders(config):
     # ----------------------
     # TRAIN/VAL/TEST DATALOADERS
     # ----------------------
-    batch_size = model_conf['batch_size']
-    train_data, val_data, test_data  = load_data(model_conf)
+    batch_size = config.model.batch_size
+    train_data, val_data, test_data  = load_data(config)
     # TensorDataset from training examples. ".cuda()" puts the corresponding tensor on gpu
     squad_train_dataset = TensorDataset(torch.tensor(train_data['input_ids'], dtype=torch.long).cuda(),
                                 torch.tensor(train_data['attention_mask'], dtype=torch.long).cuda(),  
