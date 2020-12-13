@@ -5,14 +5,33 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # import wandb
-
+from .conf import default_config
 from .model import create_model, SQUADBERT
 
+
 def load_model(config=None): 
-    model_save_dir = config.dirs.saved_models
-    if not os.path.exists(model_save_dir):
-        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
-    model_name = config.model.name
+    if config is None:
+        config = default_config()
+        model_save_dir = config.dirs.saved_models
+        models = os.listdir(model_save_dir)
+        menu = zip([f'[{i}]' for i in range(len(models))], models)
+        menu = [number + ' - ' + model for number, model in menu]
+        menu = '\n'.join(menu)
+        number = input(f'Enter number of model to load:\n{menu}\n')
+        model_name = models[int(number)]
+    else:
+        model_save_dir = config.dirs.saved_models
+        if not os.path.exists(model_save_dir):
+            raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
+        model_name = '_'.join([config.transformer.model,
+                    config.transformer.version,
+                    config.model.model,
+                    config.model.signature,
+                    str(config.model.max_len),
+                    str(config.model.batch_size),
+                    str(config.model.lr),
+                    str(config.model.freeze_layers)
+                    ])
     model_path = model_save_dir + model_name + '/model.ckpt'
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     if os.path.exists(model_path):
@@ -21,7 +40,7 @@ def load_model(config=None):
             'max_len' : config.model.max_len,
             'freeze_layers' : config.model.freeze_layers,
             'lr' : config.model.lr,
-            'config' : config          
+            'config' : [config]      
         }
         model = globals()[config.model.model].load_from_checkpoint(model_path, **hparams)
         # model = create_model(config, loading=True)
@@ -38,7 +57,15 @@ def train_model(config):
     model_save_dir = config.dirs.saved_models
     if not os.path.exists(model_save_dir):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
-    model_name = config.model.name
+    model_name = '_'.join([config.transformer.model,
+                   config.transformer.version,
+                   config.model.model,
+                   config.model.signature,
+                   str(config.model.max_len),
+                   str(config.model.batch_size),
+                   str(config.model.lr),
+                   str(config.model.freeze_layers)
+                   ])
     model_path = model_save_dir + model_name + '/model.ckpt'
     # wandb_path = log_dir + 'wandb/' + model_name + '_id.pickle'  
 
@@ -92,7 +119,7 @@ def train_model(config):
         progress_bar_refresh_rate = 25,
         logger = [tb_logger, wandb_logger],
         resume_from_checkpoint = resume_from_checkpoint,
-        **config.train
+        **config.train.__dict__
         ) 
     # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')
     # wandb.save('EarlyStoppingADam-32-0.001.pth')   

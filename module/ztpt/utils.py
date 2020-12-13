@@ -13,7 +13,7 @@ def get_tokenizer(config):
     except:
         raise ValueError(f"Unknown transformer model version: {conf['transformer'] + '-' + conf['transformer_version']}. Please, select a different transformer model version or include this version in the code.")
 
-def get_transformer(model_conf):
+def get_transformer(config):
     '''
     Return transformer model based on configuration.
     '''

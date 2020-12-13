@@ -7,14 +7,24 @@ from tqdm import tqdm, trange
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
+from .conf import ConfigNamespace
 from .utils import get_transformer
+from .preprocessing import load_data
 from .val import evaluate_on_batch
 
 def create_model(config, loading = False):
     model_save_dir = config.dirs.saved_models
     if not os.path.exists(model_save_dir):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
-    model_name = config.model.name
+    model_name = '_'.join([config.transformer.model,
+                   config.transformer.version,
+                   config.model.model,
+                   config.model.signature,
+                   str(config.model.max_len),
+                   str(config.model.batch_size),
+                   str(config.model.lr),
+                   str(config.model.freeze_layers)
+                   ])
     model_path = model_save_dir + model_name + '/model.ckpt'
     if not os.path.exists(model_path) or loading: 
         if not os.path.exists(model_save_dir + model_name): 
@@ -34,13 +44,13 @@ class SQUADBERT(pl.LightningModule):
     def __init__(self, batch_size, max_len, freeze_layers, lr, config):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
-        self.config = config
+        self.config = config[0]
         self.batch_size = batch_size     
         self.max_len = max_len
         self.freeze_layers = freeze_layers
         self.lr = lr
         # initializing BERT
-        self.bert = get_transformer(config).cuda()
+        self.bert = get_transformer(self.config).cuda()
         self.bert_dim = self.bert.config.hidden_size
         # initializing dataloaders
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
