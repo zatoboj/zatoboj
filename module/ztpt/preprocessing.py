@@ -142,3 +142,28 @@ def preprocess(model_conf):
         with open(test_data_path, 'wb') as f:
             pickle.dump(test_data, f)
         print(f'Preprocessed validation and test data succesfully saved at {val_data_path} and {test_data_path}.')
+
+def load_data(model_conf):
+    preprocess(model_conf)
+    print('Beginning to load preprocessed data...')
+    data_dir = model_conf['data_dir']
+    if not os.path.exists(data_dir):
+        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a datasets folder ('datasets'). Be a good boy, copy shared datasets folder into root directory.")
+    conf_prefix = model_conf['transformer'] + '-' + model_conf['transformer_version'] + '-' + str(model_conf['max_len']) 
+    train_data_path = data_dir + conf_prefix + '-train.pickle'
+    val_data_path = data_dir + conf_prefix + '-val.pickle'
+    test_data_path = data_dir + conf_prefix + '-test.pickle'
+    with open(train_data_path, 'rb') as f:
+        train_data = pickle.load(f)
+    with open(val_data_path, 'rb') as f:
+        val_data = pickle.load(f) 
+    with open(test_data_path, 'rb') as f:
+        test_data = pickle.load(f)
+    train_data['indexing'] = list(range(len(train_data['labels'])))
+    val_data['indexing'] = list(range(len(val_data['labels'])))   
+    test_data['indexing'] = list(range(len(test_data['labels'])))   
+    print('Preprocessed data has been succesfully loaded')
+    print('Train data size:'.ljust(21), len(train_data['labels']))
+    print('Validation data size:'.ljust(21), len(val_data['labels']))
+    print('Test data size:'.ljust(21), len(test_data['labels']))                   
+    return train_data, val_data, test_data

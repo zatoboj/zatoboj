@@ -7,34 +7,8 @@ from tqdm import tqdm, trange
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
-from .preprocessing import preprocess
 from .utils import get_transformer
 from .val import evaluate_on_batch
-
-def load_data(model_conf):
-    preprocess(model_conf)
-    print('Beginning to load preprocessed data...')
-    data_dir = model_conf['data_dir']
-    if not os.path.exists(data_dir):
-        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a datasets folder ('datasets'). Be a good boy, copy shared datasets folder into root directory.")
-    conf_prefix = model_conf['transformer'] + '-' + model_conf['transformer_version'] + '-' + str(model_conf['max_len']) 
-    train_data_path = data_dir + conf_prefix + '-train.pickle'
-    val_data_path = data_dir + conf_prefix + '-val.pickle'
-    test_data_path = data_dir + conf_prefix + '-test.pickle'
-    with open(train_data_path, 'rb') as f:
-        train_data = pickle.load(f)
-    with open(val_data_path, 'rb') as f:
-        val_data = pickle.load(f) 
-    with open(test_data_path, 'rb') as f:
-        test_data = pickle.load(f)
-    train_data['indexing'] = list(range(len(train_data['labels'])))
-    val_data['indexing'] = list(range(len(val_data['labels'])))   
-    test_data['indexing'] = list(range(len(test_data['labels'])))   
-    print('Preprocessed data has been succesfully loaded')
-    print('Train data size:'.ljust(21), len(train_data['labels']))
-    print('Validation data size:'.ljust(21), len(val_data['labels']))
-    print('Test data size:'.ljust(21), len(test_data['labels']))                   
-    return train_data, val_data, test_data
 
 def create_model(model_conf, loading = False):
     model_save_dir = model_conf['model_save_dir']
@@ -42,7 +16,7 @@ def create_model(model_conf, loading = False):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a good boy, copy shared saved models folder into root directory.")
     model_name = '_'.join([model_conf['transformer'],
                    model_conf['transformer_version'],
-                   model_conf['model'],
+                   model_conf['model_class'],
                    model_conf['unique_name'],
                    str(model_conf['max_len']),
                    str(model_conf['batch_size']),
@@ -58,7 +32,7 @@ def create_model(model_conf, loading = False):
         freeze_layers = model_conf['freeze_layers']
         lr = model_conf['lr']
         models_dict = {'SQUADBERT' : SQUADBERT, 'SOMENAME' : SOMENAME}
-        model_class = models_dict[model_conf['model']]
+        model_class = models_dict[model_conf['model_class']]
         model = model_class(batch_size, max_len, freeze_layers, lr, model_conf)
         return model
     else:

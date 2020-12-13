@@ -6,15 +6,18 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # import wandb
 
-from .model import create_model
+from .model import create_model, SQUADBERT
 
-def load_model(model_conf=None):  
+def load_model(model_conf=None): 
+    print('hey, man!')
+    print('uf')
+    print('oh wow!') 
     model_save_dir = model_conf['model_save_dir']
     if not os.path.exists(model_save_dir):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a good boy, copy shared saved models folder into root directory.")
     model_name = '_'.join([model_conf['transformer'],
                    model_conf['transformer_version'],
-                   model_conf['model'],
+                   model_conf['model_class'],
                    model_conf['unique_name'],
                    str(model_conf['max_len']),
                    str(model_conf['batch_size']),
@@ -24,9 +27,17 @@ def load_model(model_conf=None):
     model_path = model_save_dir + model_name + '/model.ckpt'
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     if os.path.exists(model_path):
-        model = create_model(model_conf, loading=True)
-        checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
+        hparams = {
+            'batch_size' : model_conf['batch_size'],
+            'max_len' : model_conf['max_len'],
+            'freeze_layers' : model_conf['freeze_layers'],
+            'lr' : model_conf['lr'],
+            'model_conf' : model_conf          
+        }
+        model = globals()[model_conf['model_class']].load_from_checkpoint(model_path, **hparams)
+        # model = create_model(model_conf, loading=True)
+        # checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
+        # model.load_state_dict(checkpoint['state_dict'])
     else:
         raise ValueError(f'Model {model_name} does not exist.')
     return model
@@ -40,7 +51,7 @@ def train_model(model_conf):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a good boy, copy shared saved models folder into root directory.")
     model_name = '_'.join([model_conf['transformer'],
                    model_conf['transformer_version'],
-                   model_conf['model'],
+                   model_conf['model_class'],
                    model_conf['unique_name'],
                    str(model_conf['max_len']),
                    str(model_conf['batch_size']),
