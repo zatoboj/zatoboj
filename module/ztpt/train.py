@@ -110,14 +110,11 @@ def train_model(model_conf):
         gpus = 1, 
         amp_level = 'O2', 
         precision = 16, 
-        max_epochs = model_conf['epochs'], 
-        val_check_interval = model_conf['val_check_interval'], 
         checkpoint_callback = checkpoint_callback, 
         progress_bar_refresh_rate = 25,
         logger = [tb_logger, wandb_logger],
         resume_from_checkpoint = resume_from_checkpoint,
-        limit_train_batches = model_conf['limit_train_batches'],
-        limit_val_batches = model_conf['limit_val_batches']
+        **model_conf['trainer_conf']
         ) 
     # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')
     # wandb.save('EarlyStoppingADam-32-0.001.pth')   
