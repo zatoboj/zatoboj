@@ -8,7 +8,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
 from .conf import ConfigNamespace
-from .utils import get_transformer
+from .utils import get_transformer, numpify
 from .preprocessing import load_data
 from .val import Evaluator
 
@@ -105,10 +105,9 @@ class SQUADBERT(pl.LightningModule):
         loss1 = F.cross_entropy(start_logits, answer_starts)
         loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
-        _, accuracy_dict = evaluator.evaluate_on_batch(batch)   
-        # logs
-        self.log('val_loss', loss, prog_bar=True)
-        
+        _, accuracy_dict = evaluator.evaluate_on_batch(batch)
+        accuracy_dict['val_loss'] = numpify(loss)
+        # self.log('val_loss', loss, prog_bar=True)       
         return accuracy_dict
 
     def validation_epoch_end(self, val_step_outputs):

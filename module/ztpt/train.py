@@ -77,7 +77,7 @@ def train_model(config):
     # initializing model
     if os.path.exists(model_path):
         print('Model already exists, loading trained model...')
-        model = load_model(config)
+        model = load_model(config, from_list = False)
         resume_from_checkpoint = model_path       
         # with open(wandb_path, 'r') as f:
         #     id = pickle.load(f)
