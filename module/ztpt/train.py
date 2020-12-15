@@ -9,8 +9,9 @@ from .conf import default_config
 from .model import create_model, SQUADBERT, TensorBERT
 
 
-def load_model(config, from_list = True): 
+def load_model(config = None, from_list = True): 
     if from_list:
+        config = default_config()
         model_save_dir = config.dirs.saved_models
         models = os.listdir(model_save_dir)
         menu = zip([f'[{i+1}]' for i in range(len(models))], models)
@@ -128,6 +129,8 @@ def train_model(config):
     # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')
     # wandb.save('EarlyStoppingADam-32-0.001.pth')   
     trainer.fit(model) 
+    with open(model_save_dir + model_name + '/config.yaml', 'w') as f:  
+        yaml.dump(config, f)   
     print('Finished training.')
 
 
