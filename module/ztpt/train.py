@@ -39,7 +39,7 @@ def load_model(config = None, from_list = True):
         model_path = model_path_v0
     if os.path.exists(model_path):
         with open(model_save_dir + model_name + '/config.yaml', 'r') as f:  
-            config = yaml.load(f) 
+            config = yaml.load(f, Loader=yaml.FullLoader) 
         hparams = {
             'batch_size' : config.model.batch_size,
             'max_len' : config.model.max_len,

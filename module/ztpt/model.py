@@ -126,7 +126,7 @@ class SQUADBERT(pl.LightningModule):
     def val_dataloader(self):
         return self.squad_val_dataloader
 
-    def convert_predictions(self, batch, min_start, metric='plain'):
+    def get_predictions(self, batch, min_start, metric='plain'):
         '''
         Return numpy arrays of predictions of indices of starts and ends for:
         - metric='plain' - as argmax of unnormalized probability vectors

@@ -11,7 +11,6 @@ class Evaluator:
         self.metrics = model.val_metrics
 
     def get_stats_on_batch(self, batch):
-        start_prob, end_prob = self.predict(batch)
         input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = numpify(*batch)
         batch_size = input_ids.shape[0]
         min_start = np.argmax(token_type_ids, axis=1)
@@ -24,11 +23,11 @@ class Evaluator:
         stats['actual_label'] = label
         stats['input_ids'] = input_ids
         stats['indexing'] = indexing
-        stats['start_probs'] = start_prob
-        stats['end_probs'] = end_prob
+        # stats['start_probs'] = start_prob
+        # stats['end_probs'] = end_prob
 
         for metric in self.metrics:
-            start_pred, end_pred = self.model.convert_predictions(start_prob, end_prob, min_start, metric = metric)
+            start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
             stats[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
