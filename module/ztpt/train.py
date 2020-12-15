@@ -45,7 +45,7 @@ def load_model(config = None, from_list = True):
             'max_len' : config.model.max_len,
             'freeze_layers' : config.model.freeze_layers,
             'lr' : config.model.lr,
-            'config' : [config]      
+            'wrapped_config' : [config]      
         }
         model = globals()[config.model.model].load_from_checkpoint(model_path, **hparams)
         # model = create_model(config, loading=True)
