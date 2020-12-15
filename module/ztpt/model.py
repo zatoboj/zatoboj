@@ -126,7 +126,7 @@ class SQUADBERT(pl.LightningModule):
     def val_dataloader(self):
         return self.squad_val_dataloader
 
-    def convert_predictions(self, start_prob, end_prob, min_start, metric='plain'):
+    def convert_predictions(self, batch, min_start, metric='plain'):
         '''
         Return numpy arrays of predictions of indices of starts and ends for:
         - metric='plain' - as argmax of unnormalized probability vectors
@@ -134,6 +134,11 @@ class SQUADBERT(pl.LightningModule):
         - metric='byend' - as argmax of unrromalized probabilities over all i>min_start for end and
                         as argmax of unrromalized probabilities over all min_start<j<end_pred for start        
         '''
+        
+        with torch.no_grad():
+            start_prob, end_prob = self.forward(batch)
+        start_prob, end_prob = numpify(start_prob, end_prob)
+              
         neg_inf = -100
         batch_size, max_len = start_prob.shape
         if metric == 'plain':

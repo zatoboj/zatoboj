@@ -46,7 +46,7 @@ def load_model(config = None, from_list = True):
             'freeze_layers' : config.model.freeze_layers,
             'lr' : config.model.lr,
             'wrapped_config' : [config]      
-        }
+            }
         model = globals()[config.model.model].load_from_checkpoint(model_path, **hparams)
         # model = create_model(config, loading=True)
         # checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)

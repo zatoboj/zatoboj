@@ -10,16 +10,6 @@ class Evaluator:
         self.config = model.hparams.wrapped_config[0]
         self.metrics = model.val_metrics
 
-    def predict(self, batch):
-        '''
-        Return numpy arrays of unnormalized probabilities of start and end. 
-        Note that these are not actual prediction probabilities, because we didn't take softmax.
-        '''
-        with torch.no_grad():
-            start_prob, end_prob = self.model(batch)
-        start_prob, end_prob = numpify(start_prob, end_prob)
-        return start_prob, end_prob
-
     def get_stats_on_batch(self, batch):
         start_prob, end_prob = self.predict(batch)
         input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = numpify(*batch)
