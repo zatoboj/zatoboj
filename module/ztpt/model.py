@@ -67,8 +67,8 @@ class SQUADBERT(pl.LightningModule):
         logits = torch.reshape(logits_wrong_shape, (bert_output.shape[0], bert_output.shape[1]))
         return logits
 
-    def forward(self, input_ids, attention_mask, token_type_ids):
-        #apply BERT
+    def forward(self, batch):
+        input_ids, attention_mask, token_type_ids, _, _, _, _, _ = batch
         # _ should be used for classification answer/no answer
         bert_output, _ = self.bert(input_ids=input_ids, 
                          attention_mask=attention_mask, 
@@ -82,19 +82,11 @@ class SQUADBERT(pl.LightningModule):
 
     # this is the main function of pl modules. defines architecture and loss function. training loop comes for free -- implemented inside PL
     def training_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-         
-        # fwd
-        start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
-        
-        # LOSS
-
-        # compute cross_entropy loss between predictions and actual labels for start and end 
+        start_logits, end_logits = self.forward(batch)     
+        # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
         start_loss = F.cross_entropy(start_logits, answer_starts)
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
-
         # logs
         self.log('train_loss', loss, prog_bar=True)
         self.log('start_loss', start_loss, prog_bar=True)
@@ -105,20 +97,13 @@ class SQUADBERT(pl.LightningModule):
     def validation_step(self, batch, batch_nb):
         # batch
         input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-
         # fwd
         start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
-
         # loss
-
         loss1 = F.cross_entropy(start_logits, answer_starts)
         loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
-
-        # ^^^^ the code above is the same as for training step, but we also add accuracy computation for validation below
-
-        _, accuracy_dict = evaluate_on_batch(self, batch, metrics = ['plain','bysum','byend'])
-    
+        _, accuracy_dict = evaluate_on_batch(self, batch, metrics = ['plain','bysum','byend'])   
         # logs
         self.log('val_loss', loss, prog_bar=True)
         

@@ -17,10 +17,8 @@ def predict(model, batch):
     Return numpy arrays of unnormalized probabilities of start and end. 
     Note that these are not actual prediction probabilities, because we didn't take softmax.
     '''
-    input_ids, attention_mask, token_type_ids, _, _, _, _, _ = batch
-    
     with torch.no_grad():
-        start_prob, end_prob = model(input_ids, attention_mask, token_type_ids)
+        start_prob, end_prob = model(batch)
     start_prob, end_prob = numpify(start_prob, end_prob)
     return start_prob, end_prob
 
