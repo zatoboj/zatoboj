@@ -9,9 +9,8 @@ from .conf import default_config
 from .model import create_model, SQUADBERT
 
 
-def load_model(config=None): 
-    if config is None:
-        config = default_config()
+def load_model(config, from_list = True): 
+    if from_list:
         model_save_dir = config.dirs.saved_models
         models = os.listdir(model_save_dir)
         menu = zip([f'[{i+1}]' for i in range(len(models))], models)

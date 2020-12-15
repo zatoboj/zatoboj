@@ -26,7 +26,8 @@ def default_config():
     'dirs' : ConfigNamespace(),
     'transformer' : ConfigNamespace(),
     'model' : ConfigNamespace(),
-    'train' : ConfigNamespace()
+    'train' : ConfigNamespace(),
+    'cache' : ConfigNamespace()
     }
 
     config = ConfigNamespace(**config_dict)

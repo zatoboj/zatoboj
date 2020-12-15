@@ -166,4 +166,7 @@ def load_data(config):
     print('Train data size:'.ljust(21), len(train_data['labels']))
     print('Validation data size:'.ljust(21), len(val_data['labels']))
     print('Test data size:'.ljust(21), len(test_data['labels']))                   
+    config.cache.train_data = train_data
+    config.cache.val_data = val_data
+    config.cache.test_data = test_data
     return train_data, val_data, test_data
