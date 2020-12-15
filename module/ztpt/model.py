@@ -255,7 +255,7 @@ class TensorBERT(pl.LightningModule):
     
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        self.log('validation_loss', avg_loss, prog_bar=True)
+        self.log('val_loss', avg_loss, prog_bar=True)
 
         label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
         self.log('val_label_acc', label_acc, prog_bar=True)
