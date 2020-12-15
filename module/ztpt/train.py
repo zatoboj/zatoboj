@@ -1,5 +1,5 @@
 import os
-import pickle
+import pickle, yaml
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -14,11 +14,11 @@ def load_model(config=None):
         config = default_config()
         model_save_dir = config.dirs.saved_models
         models = os.listdir(model_save_dir)
-        menu = zip([f'[{i}]' for i in range(len(models))], models)
+        menu = zip([f'[{i+1}]' for i in range(len(models))], models)
         menu = [number + ' - ' + model for number, model in menu]
         menu = '\n'.join(menu)
         number = input(f'Enter number of model to load:\n{menu}\n')
-        model_name = models[int(number)]
+        model_name = models[int(number)-1]
     else:
         model_save_dir = config.dirs.saved_models
         if not os.path.exists(model_save_dir):
@@ -33,8 +33,13 @@ def load_model(config=None):
                     str(config.model.freeze_layers)
                     ])
     model_path = model_save_dir + model_name + '/model.ckpt'
+    model_path_v0 = model_save_dir + model_name + '/model-v0.ckpt'
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    if os.path.exists(model_path_v0):
+        model_path = model_path_v0
     if os.path.exists(model_path):
+        with open(model_save_dir + model_name + '/config.yaml', 'r') as f:  
+            config = yaml.load(f) 
         hparams = {
             'batch_size' : config.model.batch_size,
             'max_len' : config.model.max_len,
@@ -47,7 +52,7 @@ def load_model(config=None):
         # checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
         # model.load_state_dict(checkpoint['state_dict'])
     else:
-        raise ValueError(f'Model {model_name} does not exist.')
+        raise ValueError(f'Model {model_path} does not exist.')
     return model
 
 def train_model(config):

@@ -1,5 +1,5 @@
 import os
-import pickle, json
+import pickle, json, yaml
 import pytorch_lightning as pl
 import torch
 import numpy as np
@@ -28,7 +28,9 @@ def create_model(config, loading = False):
     model_path = model_save_dir + model_name + '/model.ckpt'
     if not os.path.exists(model_path) or loading: 
         if not os.path.exists(model_save_dir + model_name): 
-            os.mkdir(model_save_dir + model_name)     
+            os.mkdir(model_save_dir + model_name)
+        with open(model_save_dir + model_name + '/config.yaml', 'w') as f:  
+            yaml.dump(config, f)   
         batch_size = config.model.batch_size   
         max_len = config.model.max_len
         freeze_layers = config.model.freeze_layers
