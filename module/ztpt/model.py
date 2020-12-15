@@ -35,9 +35,9 @@ def create_model(config, loading = False):
         max_len = config.model.max_len
         freeze_layers = config.model.freeze_layers
         lr = config.model.lr
-        models_dict = {'SQUADBERT' : SQUADBERT, 'SOMENAME' : SOMENAME}
+        models_dict = {'SQUADBERT' : SQUADBERT, 'TensorBERT' : TensorBERT}
         model_class = models_dict[config.model.model]
-        model = model_class(batch_size, max_len, freeze_layers, lr, [config])
+        model = model_class([config])
         return model
     else:
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
@@ -140,8 +140,158 @@ class SQUADBERT(pl.LightningModule):
     def val_dataloader(self):
         return self.squad_val_dataloader
 
-class SOMENAME:
-    pass
+    def test_dataloader(self):
+        return self.squad_test_dataloader
+
+class TensorBERT(pl.LightningModule):
+
+    def __init__(self, wrapped_config):#proj_dim, num_inner_products, batch_size, weight =2., answer_punishment_coeff=1.):
+        self.config = wrapped_config[0]
+        super(TensorBERT, self).__init__() 
+        self.bert = get_transformer(self.config).cuda()
+        self.bert_dim = self.bert.config.hidden_size #768
+        self.weight = self.config.model.weight
+        self.answer_punishment_coeff = self.config.model.answer_punishment_coeff
+        self.batch_size = self.config.model.batch_size
+        self.max_len = self.config.model.max_len
+        self.proj_dim = self.config.model.proj_dim
+        self.Proj = nn.Linear(self.bert_dim, self.proj_dim)
+        self.Proj_cls = nn.Linear(self.bert_dim, self.proj_dim)
+        self.BL = nn.Bilinear(self.proj_dim, self.proj_dim, self.config.model.num_inner_products) # l scalar products of 2 vectors of dim d
+        self.L = nn.Linear(self.config.model.num_inner_products, 2)
+        self.CLS = nn.Linear(self.bert_dim, 2) #(a,b) e^a/(e^a+e^b)
+        self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
+        self.save_hyperparameters()
+
+    def my_forward_pass(self, cls_bert_output, bert_output_full):
+        current_batch_size = bert_output_full.shape[0]
+        bert_output_full = torch.reshape(bert_output_full, (current_batch_size * self.max_len, self.bert_dim))
+        proj_output_full = self.Proj(bert_output_full)
+        proj_cls = self.Proj_cls(cls_bert_output)
+        proj_cls = torch.cat([proj_cls]*self.max_len) # replicated proj_cls to make it the same shape as proj_output_full
+        long_logits = self.BL(proj_cls, proj_output_full)
+        long_logits = nn.ReLU6()(long_logits)
+        long_logits = self.L(long_logits)
+        long_logits = torch.reshape(long_logits, (current_batch_size, self.max_len, 2))
+        return long_logits
+
+    def forward(self, input_ids, attention_mask, token_type_ids):
+      
+        bert_output_full, cls_pooler_output = self.bert(input_ids=input_ids, 
+                         attention_mask=attention_mask, 
+                         token_type_ids=token_type_ids)
+        # bert_output_full.shape = (batch_size, max_len, bert_dim) -- one vector of dim=bert_dim for each token
+        # cls_pooler_output of shape (batch_size, bert_dim) -- Last layer hidden-state of the first token of the sequence (classification token) 
+        # further processed by a Linear layer and a Tanh activation function. 
+        # The Linear layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+
+        cls_bert_output = bert_output_full[:, 0, :] # vector corresponding to CLS token
+
+        # long_logits will have shape (batch_size, max_len, 2)
+        # each output of bert is projected to smaller dimension, then take a few inner products with projection of the cls vector,
+        # then another dense layer to get logits
+        long_logits = self.my_forward_pass(cls_bert_output, bert_output_full)
+        cls_logits = self.CLS(cls_pooler_output)
+
+        return cls_logits, long_logits
+
+    def training_step(self, batch, batch_nb):
+        # batch
+        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
+         
+        # fwd
+        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
+        
+        # loss
+        # loss for not guessing if there is an answer
+        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
+
+        # loss for each individual word -- is it in the answer?
+        # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
+        loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
+                                torch.reshape(answer_mask, (answer_mask.shape[0] * answer_mask.shape[1],)), weight = torch.Tensor([1.,50.]))
+        # total loss
+        # TODO: experiment with punishment coeff
+        loss = self.answer_punishment_coeff*loss1 + loss2
+        self.log('train_loss', loss, prog_bar=True)
+
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        # batch
+        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
+         
+        # fwd
+        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
+        
+        # loss
+        # loss for not guessing if there is an answer
+        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
+
+        # loss for each individual word -- is it in the answer?
+        # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
+        loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
+                                torch.reshape(answer_mask, (answer_mask.shape[0] * answer_mask.shape[1],)))#, weight = torch.Tensor([1.,self.weight]))
+        # total loss
+        # TODO: experiment with punishment coeff
+        val_loss = self.answer_punishment_coeff*loss1 + loss2
+
+        # compute accuracy 
+        # TODO: compute precision/recall on individual words, accuracy of start, end, exact match
+
+        # ну хоть одна переменная должна нормально называться
+        _ , y1 = torch.max(cls_logits, dim=1)
+        label_acc = torch.sum(y1 == label) / label.shape[0]
+        #self.log('label_acc', label_acc, prog_bar=True)
+        #self.log('val_loss', val_loss, prog_bar=True)
+
+        return {'val_loss' : val_loss, 'label_acc' : label_acc}
+        
+    def dics_average(self, dics, name):
+        d = dict()
+        for key in dics[0].keys():
+          d[name + key] = torch.stack([x[key] for x in dics]).mean()
+        return d
+    
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        self.log('validation_loss', avg_loss, prog_bar=True)
+
+        label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
+        self.log('val_label_acc', label_acc, prog_bar=True)
+
+
+    '''
+    def test_step(self, batch, batch_nb):
+        input_ids, attention_mask, token_type_ids, label = batch
+        
+        y_hat, attn = self.forward(input_ids, attention_mask, token_type_ids)
+        
+        a, y_hat = torch.max(y_hat, dim=1)
+        test_acc = accuracy_score(y_hat.cpu(), label.cpu())
+        
+        return {'test_acc': torch.tensor(test_acc)}
+
+    def test_end(self, outputs):
+
+        avg_test_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
+
+        tensorboard_logs = {'avg_test_acc': avg_test_acc}
+        return {'avg_test_acc': avg_test_acc, 'log': tensorboard_logs, 'progress_bar': tensorboard_logs}
+    '''
+    
+    def configure_optimizers(self):
+        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=5e-06, eps=1e-08)
+
+    def train_dataloader(self):
+        return self.squad_train_dataloader
+
+    def val_dataloader(self):
+        return self.squad_val_dataloader
+    
+    def test_dataloader(self):
+        return self.squad_test_dataloader
+
 
 def generate_squad_dataloaders(config):
     # ----------------------

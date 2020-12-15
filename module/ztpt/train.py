@@ -6,7 +6,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # import wandb
 from .conf import default_config
-from .model import create_model, SQUADBERT
+from .model import create_model, SQUADBERT, TensorBERT
 
 
 def load_model(config, from_list = True): 
