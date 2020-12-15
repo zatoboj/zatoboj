@@ -37,7 +37,7 @@ def create_model(config, loading = False):
         lr = config.model.lr
         models_dict = {'SQUADBERT' : SQUADBERT, 'SOMENAME' : SOMENAME}
         model_class = models_dict[config.model.model]
-        model = model_class(batch_size, max_len, freeze_layers, lr, config)
+        model = model_class(batch_size, max_len, freeze_layers, lr, [config])
         return model
     else:
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
