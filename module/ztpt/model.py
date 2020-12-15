@@ -86,6 +86,7 @@ class SQUADBERT(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         start_logits, end_logits = self.forward(batch)     
         # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
+        _, _, _, _, _, _, answer_starts, answer_ends = batch
         start_loss = F.cross_entropy(start_logits, answer_starts)
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
@@ -104,7 +105,7 @@ class SQUADBERT(pl.LightningModule):
         loss1 = F.cross_entropy(start_logits, answer_starts)
         loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
-        _, accuracy_dict = evaluator.evaluate_on_batch(batch, metrics = ['plain','bysum','byend'])   
+        _, accuracy_dict = evaluator.evaluate_on_batch(batch)   
         # logs
         self.log('val_loss', loss, prog_bar=True)
         
@@ -126,7 +127,7 @@ class SQUADBERT(pl.LightningModule):
     def val_dataloader(self):
         return self.squad_val_dataloader
 
-    def convert_predictions(start_prob, end_prob, metric='plain'):
+    def convert_predictions(self, start_prob, end_prob, min_start, metric='plain'):
         '''
         Return numpy arrays of predictions of indices of starts and ends for:
         - metric='plain' - as argmax of unnormalized probability vectors

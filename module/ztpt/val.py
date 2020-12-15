@@ -10,7 +10,7 @@ class Evaluator:
         self.config = model.hparams.wrapped_config[0]
         self.metrics = model.val_metrics
 
-    def predict(batch):
+    def predict(self, batch):
         '''
         Return numpy arrays of unnormalized probabilities of start and end. 
         Note that these are not actual prediction probabilities, because we didn't take softmax.
@@ -20,8 +20,8 @@ class Evaluator:
         start_prob, end_prob = numpify(start_prob, end_prob)
         return start_prob, end_prob
 
-    def get_stats_on_batch(batch):
-        start_prob, end_prob = predict(self.model, batch)
+    def get_stats_on_batch(self, batch):
+        start_prob, end_prob = self.predict(batch)
         input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = numpify(*batch)
         batch_size = input_ids.shape[0]
         min_start = np.argmax(token_type_ids, axis=1)
@@ -38,7 +38,7 @@ class Evaluator:
         stats['end_probs'] = end_prob
 
         for metric in self.metrics:
-            start_pred, end_pred = self.model.convert_predictions(start_prob, end_prob, metric = metric)
+            start_pred, end_pred = self.model.convert_predictions(start_prob, end_prob, min_start, metric = metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
             stats[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
@@ -51,7 +51,7 @@ class Evaluator:
 
         return stats
 
-    def evaluate_on_batch(batch):
+    def evaluate_on_batch(self, batch):
         results = {'num_examples' : 0}
         for metric in self.metrics:
             results[f'guessed_starts_{metric}'] = 0
@@ -59,12 +59,12 @@ class Evaluator:
             results[f'exact_matches_{metric}'] = 0
             results[f'guessed_labels_{metric}'] = 0
 
-        batch_stats = get_stats_on_batch(batch)
+        batch_stats = self.get_stats_on_batch(batch)
         for key in results.keys():
             results[key] += batch_stats[key]
         
         accuracy = {'num_examples' : 0}
-        for metric in metrics:
+        for metric in self.metrics:
             accuracy[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
             accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
             accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
