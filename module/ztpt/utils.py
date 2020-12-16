@@ -28,3 +28,11 @@ def get_transformer(config):
     except:
         raise ValueError('Unknown transformer model version. Please, select a different transformer model version or include this version in the code.')
         
+def numpify(*tensors):
+    '''
+    Given torch tensors as arguments return a list of corresponding numpy arrays.
+    '''
+    np_arrays = []
+    for tensor in tensors:
+        np_arrays.append(tensor.detach().cpu().numpy())
+    return np_arrays

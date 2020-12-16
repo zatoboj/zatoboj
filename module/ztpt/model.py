@@ -8,9 +8,9 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
 from .conf import ConfigNamespace
-from .utils import get_transformer
+from .utils import get_transformer, numpify
 from .preprocessing import load_data
-from .val import evaluate_on_batch
+from .val import Evaluator
 
 def create_model(config, loading = False):
     model_save_dir = config.dirs.saved_models
@@ -43,32 +43,34 @@ def create_model(config, loading = False):
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
 
 class SQUADBERT(pl.LightningModule):
-    def __init__(self, batch_size, max_len, freeze_layers, lr, config):
+    def __init__(self, batch_size, max_len, freeze_layers, lr, wrapped_config):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
-        self.config = config[0]
+        self.config = wrapped_config[0]
         self.batch_size = batch_size     
         self.max_len = max_len
         self.freeze_layers = freeze_layers
         self.lr = lr
+        # save hyperparameters for .hparams attribute
+        self.save_hyperparameters()
         # initializing BERT
         self.bert = get_transformer(self.config).cuda()
         self.bert_dim = self.bert.config.hidden_size
+        # evaluation metrics
+        self.val_metrics = ['plain', 'bysum', 'byend']
         # initializing dataloaders
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
         # initializing additional layers -- start and end vectors
         self.Start = nn.Linear(self.bert_dim, 1)
         self.End = nn.Linear(self.bert_dim, 1)
-        # save hyperparameters for .hparams attribute
-        self.save_hyperparameters()
-
+        
     def new_layers(self, bert_output, new_layer):
         logits_wrong_shape = new_layer(torch.reshape(bert_output, (bert_output.shape[0]*bert_output.shape[1], bert_output.shape[2])))
         logits = torch.reshape(logits_wrong_shape, (bert_output.shape[0], bert_output.shape[1]))
         return logits
 
-    def forward(self, input_ids, attention_mask, token_type_ids):
-        #apply BERT
+    def forward(self, batch):
+        input_ids, attention_mask, token_type_ids, _, _, _, _, _ = batch
         # _ should be used for classification answer/no answer
         bert_output, _ = self.bert(input_ids=input_ids, 
                          attention_mask=attention_mask, 
@@ -82,19 +84,12 @@ class SQUADBERT(pl.LightningModule):
 
     # this is the main function of pl modules. defines architecture and loss function. training loop comes for free -- implemented inside PL
     def training_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-         
-        # fwd
-        start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
-        
-        # LOSS
-
-        # compute cross_entropy loss between predictions and actual labels for start and end 
+        start_logits, end_logits = self.forward(batch)     
+        # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
+        _, _, _, _, _, _, answer_starts, answer_ends = batch
         start_loss = F.cross_entropy(start_logits, answer_starts)
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
-
         # logs
         self.log('train_loss', loss, prog_bar=True)
         self.log('start_loss', start_loss, prog_bar=True)
@@ -103,25 +98,16 @@ class SQUADBERT(pl.LightningModule):
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
-        # batch
+        evaluator = Evaluator(self)
         input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-
-        # fwd
-        start_logits, end_logits = self.forward(input_ids, attention_mask, token_type_ids)
-
+        start_logits, end_logits = self.forward(batch)
         # loss
-
         loss1 = F.cross_entropy(start_logits, answer_starts)
         loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
-
-        # ^^^^ the code above is the same as for training step, but we also add accuracy computation for validation below
-
-        _, accuracy_dict = evaluate_on_batch(self, batch, metrics = ['plain','bysum','byend'])
-    
-        # logs
-        self.log('val_loss', loss, prog_bar=True)
-        
+        _, accuracy_dict = evaluator.evaluate_on_batch(batch)
+        accuracy_dict['val_loss'] = numpify(loss)
+        # self.log('val_loss', loss, prog_bar=True)       
         return accuracy_dict
 
     def validation_epoch_end(self, val_step_outputs):
@@ -133,6 +119,61 @@ class SQUADBERT(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
+
+    def get_numpy_predictions(self, batch):
+        '''
+        Returns numpy arrays (start probabilities, end probabilities) on given batch 
+        '''    
+        with torch.no_grad():
+            start_prob, end_prob = self.forward(batch)
+        start_prob, end_prob = numpify(start_prob, end_prob)
+        return start_prob, end_prob
+
+    def convert_predictions(self, predictions, min_start, metric='plain'):
+        '''
+        Return numpy arrays of predictions of indices of starts and ends for:
+        - metric='plain' - as argmax of unnormalized probability vectors
+        - metric='bysum' - as argmax of the sum of unrromalized probabilities over all pairs (i,j) such that i<j (and i>min_start if given)
+        - metric='byend' - as argmax of unrromalized probabilities over all i>min_start for end and
+                        as argmax of unrromalized probabilities over all min_start<j<end_pred for start   
+        '''
+        start_prob, end_prob = predictions
+        neg_inf = -100
+        batch_size, max_len = start_prob.shape
+        if metric == 'plain':
+            start_pred = np.argmax(start_prob, axis=1)
+            end_pred = np.argmax(end_prob, axis=1)       
+        elif metric == 'bysum':
+            probs = start_prob.reshape(-1,max_len,1) + end_prob.reshape(-1,1,max_len) # array of shape: (batch_size, max_len, max_len), matrix of pairwise sums per each element of the batch
+            mask = np.zeros(probs.shape)  # create a mask to avoid including cases where i > j or i > min_start or j > min_start
+            for i,s in enumerate(min_start):
+                mask[i,:s,:] = 1
+                mask[i,:,:s] = 1
+                mask[i][np.tril_indices(max_len,-1)] = 1
+            mask[:,0,0] = 0               # we however leave i=j=0 to detect questions without answers
+            probs = np.ma.array(probs,mask=mask)
+            probs = np.ma.filled(probs,neg_inf)
+            max_probs = np.argmax(probs.reshape(batch_size,-1), axis=-1) # array of shape: (batch_size,), argmaxes of flattened matrices of pairwise sums
+            start_pred, end_pred = np.unravel_index(max_probs, (max_len, max_len)) # two arrays of shape: (batch_size,), 'unflattenning' of max_probs
+        elif metric == 'byend':
+            # first we deal with ends
+            mask = np.zeros(end_prob.shape)  # create a mask to avoid including cases where end > min_start
+            for i,s in enumerate(min_start):
+                mask[i,:s] = 1
+            mask[:,0] = 0               # we however leave end=0 to detect questions without answers
+            end_prob = np.ma.array(end_prob,mask=mask)
+            start_prob = np.ma.array(start_prob,mask=mask)
+            end_prob = np.ma.filled(end_prob,neg_inf)
+            start_prob = np.ma.filled(start_prob,neg_inf)
+            end_pred = np.argmax(end_prob, axis=-1) # array of shape: (batch_size,), argmaxes of ends' probabilities
+            # now we deal with starts
+            mask = np.zeros(start_prob.shape)  # create a mask to avoid including cases where end > min_start
+            for i,e in enumerate(end_pred):
+                mask[i,e+1:] = 1
+            start_prob = np.ma.array(start_prob,mask=mask)
+            start_prob = np.ma.filled(start_prob,neg_inf)
+            start_pred = np.argmax(start_prob, axis=-1) # array of shape: (batch_size,), argmaxes of starts' probabilities
+        return start_pred, end_pred
 
     def train_dataloader(self):
         return self.squad_train_dataloader
@@ -291,7 +332,6 @@ class TensorBERT(pl.LightningModule):
     
     def test_dataloader(self):
         return self.squad_test_dataloader
-
 
 def generate_squad_dataloaders(config):
     # ----------------------

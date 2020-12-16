@@ -39,14 +39,14 @@ def load_model(config = None, from_list = True):
         model_path = model_path_v0
     if os.path.exists(model_path):
         with open(model_save_dir + model_name + '/config.yaml', 'r') as f:  
-            config = yaml.load(f) 
+            config = yaml.load(f, Loader=yaml.FullLoader) 
         hparams = {
             'batch_size' : config.model.batch_size,
             'max_len' : config.model.max_len,
             'freeze_layers' : config.model.freeze_layers,
             'lr' : config.model.lr,
-            'config' : [config]      
-        }
+            'wrapped_config' : [config]      
+            }
         model = globals()[config.model.model].load_from_checkpoint(model_path, **hparams)
         # model = create_model(config, loading=True)
         # checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
@@ -77,7 +77,7 @@ def train_model(config):
     # initializing model
     if os.path.exists(model_path):
         print('Model already exists, loading trained model...')
-        model = load_model(config)
+        model = load_model(config, from_list = False)
         resume_from_checkpoint = model_path       
         # with open(wandb_path, 'r') as f:
         #     id = pickle.load(f)
