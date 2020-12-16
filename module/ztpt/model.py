@@ -43,14 +43,14 @@ def create_model(config, loading = False):
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
 
 class SQUADBERT(pl.LightningModule):
-    def __init__(self, batch_size, max_len, freeze_layers, lr, wrapped_config):
+    def __init__(self, wrapped_config):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
         self.config = wrapped_config[0]
-        self.batch_size = batch_size     
-        self.max_len = max_len
-        self.freeze_layers = freeze_layers
-        self.lr = lr
+        self.batch_size = self.config.model.batch_size     
+        self.max_len = self.config.model.max_len
+        self.freeze_layers = self.config.model.freeze_layers
+        self.lr = self.config.model.lr
         # save hyperparameters for .hparams attribute
         self.save_hyperparameters()
         # initializing BERT
@@ -63,6 +63,7 @@ class SQUADBERT(pl.LightningModule):
         # initializing additional layers -- start and end vectors
         self.Start = nn.Linear(self.bert_dim, 1)
         self.End = nn.Linear(self.bert_dim, 1)
+        self.custom_step = 0
         
     def new_layers(self, bert_output, new_layer):
         logits_wrong_shape = new_layer(torch.reshape(bert_output, (bert_output.shape[0]*bert_output.shape[1], bert_output.shape[2])))
@@ -90,10 +91,12 @@ class SQUADBERT(pl.LightningModule):
         start_loss = F.cross_entropy(start_logits, answer_starts)
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
+        self.custom_step += start_logits.shape[0]
         # logs
         self.log('train_loss', loss, prog_bar=True)
         self.log('start_loss', start_loss, prog_bar=True)
         self.log('end_loss', end_loss, prog_bar=True)
+        self.log('custom_step', self.custom_step)
 
         return {'loss': loss}
 
@@ -115,6 +118,7 @@ class SQUADBERT(pl.LightningModule):
         for key in val_step_outputs[0]:
             aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
             log_dict[key] = aggregated
+        log_dict['custom_step'] = self.custom_step
         self.log_dict(log_dict, prog_bar=True)
 
     def configure_optimizers(self):
