@@ -25,9 +25,10 @@ class Evaluator:
         stats['indexing'] = indexing
         # stats['start_probs'] = start_prob
         # stats['end_probs'] = end_prob
-
+        predictions = self.model.get_numpy_predictions(batch)
         for metric in self.metrics:
-            start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
+            #start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
+            start_pred, end_pred = self.model.convert_predictions(predictions, min_start, metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
             stats[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
