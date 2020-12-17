@@ -64,6 +64,12 @@ class SQUADBERT(pl.LightningModule):
         self.Start = nn.Linear(self.bert_dim, 1)
         self.End = nn.Linear(self.bert_dim, 1)
         self.custom_step = 0
+    
+    @property
+    def global_step(self) -> int:
+        """Total training batches seen across all epochs"""
+        return self.custom_step
+        #return self.trainer.global_step if self.trainer else 0
         
     def new_layers(self, bert_output, new_layer):
         logits_wrong_shape = new_layer(torch.reshape(bert_output, (bert_output.shape[0]*bert_output.shape[1], bert_output.shape[2])))
@@ -92,6 +98,7 @@ class SQUADBERT(pl.LightningModule):
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
         self.custom_step += start_logits.shape[0]
+        self.trainer.global_step = self.custom_step
         # logs
         self.log('train_loss', loss, prog_bar=True)
         self.log('start_loss', start_loss, prog_bar=True)
@@ -119,6 +126,7 @@ class SQUADBERT(pl.LightningModule):
             aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
             log_dict[key] = aggregated
         log_dict['custom_step'] = self.custom_step
+        self.trainer.global_step = self.custom_step
         self.log_dict(log_dict, prog_bar=True)
 
     def configure_optimizers(self):
