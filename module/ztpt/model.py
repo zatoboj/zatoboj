@@ -112,7 +112,8 @@ class SQUADBERT(pl.LightningModule):
         loss2 = F.cross_entropy(end_logits, answer_ends)
         loss = loss1 + loss2
         _, accuracy_dict = evaluator.evaluate_on_batch(batch)
-        accuracy_dict['val_loss'] = numpify(loss)      
+        accuracy_dict['val_loss'] = numpify(loss)   
+        self.log('val_loss', loss, prog_bar=True, logger=False)   
         return accuracy_dict
 
     def validation_epoch_end(self, val_step_outputs):
