@@ -122,7 +122,7 @@ def train_model(config):
         precision = 16, 
         checkpoint_callback = checkpoint_callback, 
         progress_bar_refresh_rate = 25,
-        logger = [tb_logger, wandb_logger],
+        logger = wandb_logger,
         resume_from_checkpoint = resume_from_checkpoint,
         **config.train.__dict__
         ) 
