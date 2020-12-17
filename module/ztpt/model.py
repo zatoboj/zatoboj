@@ -13,19 +13,23 @@ from .utils import get_transformer, numpify
 from .preprocessing import load_data
 from .val import Evaluator
 
-def create_model(config, loading = False):
-    model_save_dir = config.dirs.saved_models
-    if not os.path.exists(model_save_dir):
-        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
+def get_model_name(config):
     model_name = '_'.join([config.transformer.model,
                    config.transformer.version,
                    config.model.model,
                    config.model.signature,
                    str(config.model.max_len),
                    str(config.model.batch_size),
-                   str(config.model.lr),
+                   str(f'{config.model.lr:.0e}'),
                    str(config.model.freeze_layers)
                    ])
+    return model_name
+
+def create_model(config, loading = False):
+    model_save_dir = config.dirs.saved_models
+    if not os.path.exists(model_save_dir):
+        raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
+    model_name = get_model_name(config)
     model_path = model_save_dir + model_name + '/model.ckpt'
     if not os.path.exists(model_path) or loading: 
         if not os.path.exists(model_save_dir + model_name): 
