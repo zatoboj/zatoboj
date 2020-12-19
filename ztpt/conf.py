@@ -40,12 +40,17 @@ def default_config():
     config.transformer.model = 'albert'
     config.transformer.version = 'base-v2'
 
-    config.model.max_len = 256
-    config.model.batch_size = 16
     config.model.model = 'SQUADBERT'
+    config.model.max_len = 256
+    config.model.batch_size = 16    
     config.model.lr = 1e-05
     config.model.freeze_layers = 0
     config.model.signature = ''
+
+    config.model.proj_dim = 20
+    config.model.weight = 1.
+    config.model.answer_punishment_coeff = 1.
+    config.model.num_inner_products = 5
 
     config.train.max_epochs = 1
     config.train.val_check_interval = 0.2

@@ -14,6 +14,9 @@ from .preprocessing import load_data
 from .val import Evaluator
 
 def get_model_name(config):
+    '''
+    Return canonical name of model based on configuration.
+    '''
     model_name = '_'.join([config.transformer.model,
                    config.transformer.version,
                    config.model.model,
@@ -26,6 +29,9 @@ def get_model_name(config):
     return model_name
 
 def create_model(config, loading = False):
+    '''
+    Return new model based on configration. If loading existing model use `load_model` instead.
+    '''
     model_save_dir = config.dirs.saved_models
     if not os.path.exists(model_save_dir):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
@@ -197,22 +203,26 @@ class SQUADBERT(pl.LightningModule):
 class TensorBERT(pl.LightningModule):
 
     def __init__(self, wrapped_config):#proj_dim, num_inner_products, batch_size, weight =2., answer_punishment_coeff=1.):
-        self.config = wrapped_config[0]
         super(TensorBERT, self).__init__() 
-        self.bert = get_transformer(self.config).cuda()
-        self.bert_dim = self.bert.config.hidden_size #768
-        self.weight = self.config.model.weight
-        self.answer_punishment_coeff = self.config.model.answer_punishment_coeff
+        self.config = wrapped_config[0]
         self.batch_size = self.config.model.batch_size
         self.max_len = self.config.model.max_len
         self.proj_dim = self.config.model.proj_dim
+        self.weight = self.config.model.weight
+        self.answer_punishment_coeff = self.config.model.answer_punishment_coeff
+        self.num_inner_products = self.config.model.num_inner_products
+
+        self.bert = get_transformer(self.config).cuda()
+        self.bert_dim = self.bert.config.hidden_size #768
+           
         self.Proj = nn.Linear(self.bert_dim, self.proj_dim)
         self.Proj_cls = nn.Linear(self.bert_dim, self.proj_dim)
-        self.BL = nn.Bilinear(self.proj_dim, self.proj_dim, self.config.model.num_inner_products) # l scalar products of 2 vectors of dim d
-        self.L = nn.Linear(self.config.model.num_inner_products, 2)
+        self.BL = nn.Bilinear(self.proj_dim, self.proj_dim, self.num_inner_products) # l scalar products of 2 vectors of dim d
+        self.L = nn.Linear(self.num_inner_products, 2)
         self.CLS = nn.Linear(self.bert_dim, 2) #(a,b) e^a/(e^a+e^b)
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
         self.save_hyperparameters()
+        self.custom_step = 0
 
     def my_forward_pass(self, cls_bert_output, bert_output_full):
         current_batch_size = bert_output_full.shape[0]
@@ -226,8 +236,7 @@ class TensorBERT(pl.LightningModule):
         long_logits = torch.reshape(long_logits, (current_batch_size, self.max_len, 2))
         return long_logits
 
-    def forward(self, input_ids, attention_mask, token_type_ids):
-      
+    def forward(self, input_ids, attention_mask, token_type_ids):      
         bert_output_full, cls_pooler_output = self.bert(input_ids=input_ids, 
                          attention_mask=attention_mask, 
                          token_type_ids=token_type_ids)
@@ -235,28 +244,21 @@ class TensorBERT(pl.LightningModule):
         # cls_pooler_output of shape (batch_size, bert_dim) -- Last layer hidden-state of the first token of the sequence (classification token) 
         # further processed by a Linear layer and a Tanh activation function. 
         # The Linear layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-
         cls_bert_output = bert_output_full[:, 0, :] # vector corresponding to CLS token
-
         # long_logits will have shape (batch_size, max_len, 2)
         # each output of bert is projected to smaller dimension, then take a few inner products with projection of the cls vector,
         # then another dense layer to get logits
         long_logits = self.my_forward_pass(cls_bert_output, bert_output_full)
         cls_logits = self.CLS(cls_pooler_output)
-
         return cls_logits, long_logits
 
     def training_step(self, batch, batch_nb):
         # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-         
+        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch        
         # fwd
         cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
-        
-        # loss
         # loss for not guessing if there is an answer
         loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
-
         # loss for each individual word -- is it in the answer?
         # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
         loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
@@ -264,21 +266,23 @@ class TensorBERT(pl.LightningModule):
         # total loss
         # TODO: experiment with punishment coeff
         loss = self.answer_punishment_coeff*loss1 + loss2
-        self.log('train_loss', loss, prog_bar=True)
+
+        self.custom_step += cls_logits.shape[0]
+        self.logger.experiment.log({
+            'train_loss' : loss,
+            'epoch' : self.current_epoch
+            }, step = self.custom_step)
 
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-         
+        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch        
         # fwd
-        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
-        
+        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)        
         # loss
         # loss for not guessing if there is an answer
         loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
-
         # loss for each individual word -- is it in the answer?
         # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
         loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
@@ -286,30 +290,23 @@ class TensorBERT(pl.LightningModule):
         # total loss
         # TODO: experiment with punishment coeff
         val_loss = self.answer_punishment_coeff*loss1 + loss2
-
         # compute accuracy 
         # TODO: compute precision/recall on individual words, accuracy of start, end, exact match
-
         # ну хоть одна переменная должна нормально называться
         _ , y1 = torch.max(cls_logits, dim=1)
         label_acc = torch.sum(y1 == label) / label.shape[0]
-        #self.log('label_acc', label_acc, prog_bar=True)
-        #self.log('val_loss', val_loss, prog_bar=True)
+
+        self.log('val_loss', val_loss, prog_bar=True, logger=False) 
+        self.log('label_acc/plain', label_acc, prog_bar=True, logger=False) 
 
         return {'val_loss' : val_loss, 'label_acc' : label_acc}
-        
-    def dics_average(self, dics, name):
-        d = dict()
-        for key in dics[0].keys():
-          d[name + key] = torch.stack([x[key] for x in dics]).mean()
-        return d
     
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        self.log('val_loss', avg_loss, prog_bar=True)
-
         label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
-        self.log('val_label_acc', label_acc, prog_bar=True)
+        log_dict = {'val_loss' : avg_loss, 'label_acc' : label_acc}
+        self.logger.experiment.log(log_dict, step = self.custom_step)
+ 
 
 
     '''
