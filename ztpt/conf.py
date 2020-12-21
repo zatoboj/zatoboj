@@ -27,7 +27,6 @@ def default_config():
     'transformer' : ConfigNamespace(),
     'model' : ConfigNamespace(),
     'train' : ConfigNamespace(),
-    'cache' : ConfigNamespace()
     }
 
     config = ConfigNamespace(**config_dict)
@@ -36,6 +35,7 @@ def default_config():
     config.dirs.data = '/content/gdrive/My Drive/ybshmmlchk/datasets/'
     config.dirs.saved_models = '/content/gdrive/My Drive/ybshmmlchk/saved_models/'
     config.dirs.logs = '/content/gdrive/My Drive/ybshmmlchk/logs/'
+    config.dirs.py_drive = False
 
     config.transformer.model = 'albert'
     config.transformer.version = 'base-v2'

@@ -132,6 +132,10 @@ class SQUADBERT(pl.LightningModule):
             aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
             log_dict[key] = aggregated
         self.logger.experiment.log(log_dict, step = self.custom_step)
+        if config.dirs.py_drive:
+            for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
+                if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
+                    a_file.Delete()
 
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
@@ -306,7 +310,10 @@ class TensorBERT(pl.LightningModule):
         label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
         log_dict = {'val_loss' : avg_loss, 'label_acc' : label_acc}
         self.logger.experiment.log(log_dict, step = self.custom_step)
- 
+        if config.dirs.py_drive:
+            for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
+                if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
+                    a_file.Delete()
 
 
     '''
