@@ -113,7 +113,7 @@ class SQUADBERT(pl.LightningModule):
 
         return {'loss': loss}
 
-    def compute_loss(predictions, batch):
+    def compute_loss(self, predictions, batch):
         start_logits, end_logits = predictions
         #loss_dict = {}     
         # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
@@ -137,7 +137,7 @@ class SQUADBERT(pl.LightningModule):
         #loss = loss1 + loss2
         _, accuracy_dict = evaluator.evaluate_on_batch(batch)
         #accuracy_dict['val_loss'] = numpify(loss)   
-        self.log(accuracy_dict['val_loss'], loss, prog_bar=True, logger=False)   
+        self.log('val_loss', torch.tensor(accuracy_dict['val_loss']), prog_bar=True, logger=False)   
         return accuracy_dict
 
     def validation_epoch_end(self, val_step_outputs):

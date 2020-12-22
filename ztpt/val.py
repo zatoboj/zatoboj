@@ -28,7 +28,7 @@ class Evaluator:
         predictions = self.model.get_predictions(batch)
         for metric in self.metrics:
             #start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
-            start_pred, end_pred = self.model.convert_predictions(numpify(predictions), min_start, metric)
+            start_pred, end_pred = self.model.convert_predictions(numpify(*predictions), min_start, metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
             stats[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
@@ -39,7 +39,7 @@ class Evaluator:
             stats[f'predicted_end_{metric}'] = end_pred
             stats[f'predicted_label_{metric}'] = label_pred
             stats[f'contains_answer_{metric}'] = np.sum((answer_starts >= start_pred) & (answer_ends <= end_pred))        
-            stats['loss'] = self.model.compute_loss(predictions, batch)
+        stats['loss'] = (self.model.compute_loss(predictions, batch)).detach().cpu().numpy()
         return stats
 
     def evaluate_on_batch(self, batch):
