@@ -133,7 +133,9 @@ class SQUADBERT(pl.LightningModule):
         if self.config.dirs.py_drive:
             for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
+                    title = a_file['title']
                     a_file.Delete()
+                    print(f'File {title} was deleted from Trash.')
                   
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
