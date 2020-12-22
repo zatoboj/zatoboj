@@ -25,10 +25,10 @@ class Evaluator:
         stats['indexing'] = indexing
         # stats['start_probs'] = start_prob
         # stats['end_probs'] = end_prob
-        predictions = self.model.get_numpy_predictions(batch)
+        predictions = self.model.get_predictions(batch)
         for metric in self.metrics:
             #start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
-            start_pred, end_pred = self.model.convert_predictions(predictions, min_start, metric)
+            start_pred, end_pred = self.model.convert_predictions(numpify(predictions), min_start, metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
             stats[f'guessed_starts_{metric}'] = np.sum(answer_starts == start_pred)
@@ -38,7 +38,8 @@ class Evaluator:
             stats[f'predicted_start_{metric}'] = start_pred
             stats[f'predicted_end_{metric}'] = end_pred
             stats[f'predicted_label_{metric}'] = label_pred
-
+            stats[f'contains_answer_{metric}'] = np.sum((answer_starts >= start_pred) & (answer_ends <= end_pred))        
+            stats['loss'] = self.model.compute_loss(predictions, batch)
         return stats
 
     def evaluate_on_batch(self, batch):
@@ -48,21 +49,26 @@ class Evaluator:
             results[f'guessed_ends_{metric}'] = 0
             results[f'exact_matches_{metric}'] = 0
             results[f'guessed_labels_{metric}'] = 0
+            results[f'contains_answer_{metric}'] = 0
 
         batch_stats = self.get_stats_on_batch(batch)
         for key in results.keys():
             results[key] += batch_stats[key]
         
+        ## ???????
         accuracy = {'num_examples' : 0}
+
+        accuracy['val_loss'] = batch_stats['loss']
         for metric in self.metrics:
             accuracy[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
             accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
             accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
             accuracy[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
-
+            accuracy[f'contains_answer_acc/{metric}'] = results[f'contains_answer_{metric}'] / results['num_examples']
+            
         return results, accuracy
         
-
+#TODO: rewrite this function, right now it can't work -- metrics is not defined
 def evaluate(model, data_mode = 'val', verbose = True):
     evaluator = Evaluator(model)
     # choose dataloader
@@ -89,6 +95,7 @@ def evaluate(model, data_mode = 'val', verbose = True):
         accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
         accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
         accuracy[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+        
     # print accuracy results
     if verbose:
         print(f'Evaluation results for with_min_start={with_min_start}:')

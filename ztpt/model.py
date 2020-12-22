@@ -96,34 +96,48 @@ class SQUADBERT(pl.LightningModule):
 
     # this is the main function of pl modules. defines architecture and loss function. training loop comes for free -- implemented inside PL
     def training_step(self, batch, batch_nb):
-        start_logits, end_logits = self.forward(batch)     
-        # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
-        _, _, _, _, _, _, answer_starts, answer_ends = batch
-        start_loss = F.cross_entropy(start_logits, answer_starts)
-        end_loss = F.cross_entropy(end_logits, answer_ends)
-        loss = start_loss + end_loss
-        self.custom_step += start_logits.shape[0]
+        predictions = self.forward(batch)     
+        loss = self.compute_loss(predictions, batch)
+        #loss = loss_dict['loss']
+        #loss_dict['start_loss'] = start_loss
+        #loss_dict['end_loss'] = end_loss
+
+        self.custom_step += predictions[0].shape[0]
         # logs
         self.logger.experiment.log({
             'train_loss' : loss,
-            'start_loss' : start_loss,
-            'end_loss' : end_loss,
+            #'start_loss' : start_loss,
+            #'end_loss' : end_loss,
             'epoch' : self.current_epoch
             }, step = self.custom_step)
 
         return {'loss': loss}
 
+    def compute_loss(predictions, batch):
+        start_logits, end_logits = predictions
+        #loss_dict = {}     
+        # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
+        _, _, _, _, _, _, answer_starts, answer_ends = batch
+        start_loss = F.cross_entropy(start_logits, answer_starts)
+        end_loss = F.cross_entropy(end_logits, answer_ends)
+        loss = start_loss + end_loss
+        #loss_dict['loss'] = loss
+        #loss_dict['start_loss'] = start_loss
+        #loss_dict['end_loss'] = end_loss
+        return loss
+
+
     def validation_step(self, batch, batch_nb):
         evaluator = Evaluator(self)
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-        start_logits, end_logits = self.forward(batch)
+        #input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
+        #start_logits, end_logits = self.forward(batch)
         # loss
-        loss1 = F.cross_entropy(start_logits, answer_starts)
-        loss2 = F.cross_entropy(end_logits, answer_ends)
-        loss = loss1 + loss2
+        #loss1 = F.cross_entropy(start_logits, answer_starts)
+        #loss2 = F.cross_entropy(end_logits, answer_ends)
+        #loss = loss1 + loss2
         _, accuracy_dict = evaluator.evaluate_on_batch(batch)
-        accuracy_dict['val_loss'] = numpify(loss)   
-        self.log('val_loss', loss, prog_bar=True, logger=False)   
+        #accuracy_dict['val_loss'] = numpify(loss)   
+        self.log(accuracy_dict['val_loss'], loss, prog_bar=True, logger=False)   
         return accuracy_dict
 
     def validation_epoch_end(self, val_step_outputs):
@@ -132,7 +146,7 @@ class SQUADBERT(pl.LightningModule):
             aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
             log_dict[key] = aggregated
         self.logger.experiment.log(log_dict, step = self.custom_step)
-        if config.dirs.py_drive:
+        if self.config.dirs.py_drive:
             for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
@@ -140,13 +154,13 @@ class SQUADBERT(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
 
-    def get_numpy_predictions(self, batch):
+    def get_predictions(self, batch):
         '''
-        Returns numpy arrays (start probabilities, end probabilities) on given batch 
+        Returns arrays (start probabilities, end probabilities) on given batch 
         '''    
         with torch.no_grad():
             start_prob, end_prob = self.forward(batch)
-        start_prob, end_prob = numpify(start_prob, end_prob)
+        #start_prob, end_prob = numpify(start_prob, end_prob)
         return start_prob, end_prob
 
     def convert_predictions(self, predictions, min_start, metric='plain'):
@@ -215,6 +229,7 @@ class TensorBERT(pl.LightningModule):
         self.weight = self.config.model.weight
         self.answer_punishment_coeff = self.config.model.answer_punishment_coeff
         self.num_inner_products = self.config.model.num_inner_products
+        self.val_metrics = ['plain']
 
         self.bert = get_transformer(self.config).cuda()
         self.bert_dim = self.bert.config.hidden_size #768
@@ -235,7 +250,7 @@ class TensorBERT(pl.LightningModule):
         proj_cls = self.Proj_cls(cls_bert_output)
         proj_cls = torch.cat([proj_cls]*self.max_len) # replicated proj_cls to make it the same shape as proj_output_full
         long_logits = self.BL(proj_cls, proj_output_full)
-        long_logits = nn.ReLU6()(long_logits)
+        long_logits = nn.LeakyReLU(negative_slope=0.1)(long_logits)
         long_logits = self.L(long_logits)
         long_logits = torch.reshape(long_logits, (current_batch_size, self.max_len, 2))
         return long_logits
@@ -254,6 +269,7 @@ class TensorBERT(pl.LightningModule):
         # then another dense layer to get logits
         long_logits = self.my_forward_pass(cls_bert_output, bert_output_full)
         cls_logits = self.CLS(cls_pooler_output)
+        #cls_logits will have shape (batch_size, 2)
         return cls_logits, long_logits
 
     def training_step(self, batch, batch_nb):
@@ -262,7 +278,7 @@ class TensorBERT(pl.LightningModule):
         # fwd
         cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
         # loss for not guessing if there is an answer
-        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
+        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([self.weight,1.]))
         # loss for each individual word -- is it in the answer?
         # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
         loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
@@ -297,20 +313,24 @@ class TensorBERT(pl.LightningModule):
         # compute accuracy 
         # TODO: compute precision/recall on individual words, accuracy of start, end, exact match
         # ну хоть одна переменная должна нормально называться
-        _ , y1 = torch.max(cls_logits, dim=1)
-        label_acc = torch.sum(y1 == label) / label.shape[0]
+        #_ , y1 = torch.max(cls_logits, dim=1)
+        #label_acc = torch.sum(y1 == label) / label.shape[0]
 
-        self.log('val_loss', val_loss, prog_bar=True, logger=False) 
-        self.log('label_acc/plain', label_acc, prog_bar=True, logger=False) 
+        #self.log('val_loss', val_loss, prog_bar=True, logger=False) 
+        #self.log('label_acc/plain', label_acc, prog_bar=True, logger=False)
+        _, accuracy_dict = evaluator.evaluate_on_batch(batch)
+        accuracy_dict['val_loss'] = numpify(loss)   
+        self.log('val_loss', loss, prog_bar=True, logger=False)   
+        return accuracy_dict
 
-        return {'val_loss' : val_loss, 'label_acc' : label_acc}
+        #return {'val_loss' : val_loss, 'label_acc' : label_acc}
     
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
         label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
         log_dict = {'val_loss' : avg_loss, 'label_acc' : label_acc}
         self.logger.experiment.log(log_dict, step = self.custom_step)
-        if config.dirs.py_drive:
+        if self.config.dirs.py_drive:
             for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
@@ -346,6 +366,85 @@ class TensorBERT(pl.LightningModule):
     
     def test_dataloader(self):
         return self.squad_test_dataloader
+
+    def get_numpy_predictions(self, batch):
+        '''
+        Returns numpy arrays (start probabilities, end probabilities) on given batch 
+        '''    
+        with torch.no_grad():
+            labels_prob, individual_words_prob = self.forward(batch)
+        labels_prob, individual_words_prob = numpify(labels_prob, individual_words_prob)
+        return labels_prob, individual_words_prob
+
+    def convert_predictions(self, predictions, min_start, metric='plain'):
+        '''
+        TODO: write proper description once a few metrics are added
+        Return numpy arrays of predictions of indices of starts and ends for:
+        - metric='plain' - as argmax of unnormalized probability vectors
+        - metric='bysum' - as argmax of the sum of unrromalized probabilities over all pairs (i,j) such that i<j (and i>min_start if given)
+        - metric='byend' - as argmax of unrromalized probabilities over all i>min_start for end and
+                        as argmax of unrromalized probabilities over all min_start<j<end_pred for start   
+        '''
+        labels_prob, individual_words_prob = predictions
+        labels_prob = labels_prob[:, 1] - labels_prob[:, 0]
+        individual_words_prob = individual_words_prob[:, :, 1] - individual_words_prob[:, :, 0]
+        neg_inf = -100
+        batch_size, max_len = individual_words_prob.shape
+        if metric == 'plain':
+            labels_pred = (labels_prob>0).astype(int)
+
+            max_indices = np.argmax(individual_words_prob, axis=1)
+            start_pred = np.zeros(labels_pred.shape)
+            end_pred = np.zeros(labels_pred.shape)
+            for i in range(batch_size):
+                if individual_words_prob[i, max_indices[i]] <=0:
+                    start_pred[i] = 0
+                    end_pred[i] = 0
+                    continue
+
+                current_index = max_indices[i]
+                while individual_words_prob[i, current_index]>0 and current_index>0:
+                    current_index-=1
+                start_pred[i] = min(current_index+1, max_len)
+
+                current_index = max_indices[i]
+                while individual_words_prob[i, current_index]>0 and current_index<max_len:
+                    current_index+=1
+                start_pred[i] = max(current_index-1, 0)
+
+            start_pred = start_pred * labels_pred
+            end_pred = np.end_pred * labels_pred       
+        elif metric == 'bysum':
+            probs = start_prob.reshape(-1,max_len,1) + end_prob.reshape(-1,1,max_len) # array of shape: (batch_size, max_len, max_len), matrix of pairwise sums per each element of the batch
+            mask = np.zeros(probs.shape)  # create a mask to avoid including cases where i > j or i > min_start or j > min_start
+            for i,s in enumerate(min_start):
+                mask[i,:s,:] = 1
+                mask[i,:,:s] = 1
+                mask[i][np.tril_indices(max_len,-1)] = 1
+            mask[:,0,0] = 0               # we however leave i=j=0 to detect questions without answers
+            probs = np.ma.array(probs,mask=mask)
+            probs = np.ma.filled(probs,neg_inf)
+            max_probs = np.argmax(probs.reshape(batch_size,-1), axis=-1) # array of shape: (batch_size,), argmaxes of flattened matrices of pairwise sums
+            start_pred, end_pred = np.unravel_index(max_probs, (max_len, max_len)) # two arrays of shape: (batch_size,), 'unflattenning' of max_probs
+        elif metric == 'byend':
+            # first we deal with ends
+            mask = np.zeros(end_prob.shape)  # create a mask to avoid including cases where end > min_start
+            for i,s in enumerate(min_start):
+                mask[i,:s] = 1
+            mask[:,0] = 0               # we however leave end=0 to detect questions without answers
+            end_prob = np.ma.array(end_prob,mask=mask)
+            start_prob = np.ma.array(start_prob,mask=mask)
+            end_prob = np.ma.filled(end_prob,neg_inf)
+            start_prob = np.ma.filled(start_prob,neg_inf)
+            end_pred = np.argmax(end_prob, axis=-1) # array of shape: (batch_size,), argmaxes of ends' probabilities
+            # now we deal with starts
+            mask = np.zeros(start_prob.shape)  # create a mask to avoid including cases where end > min_start
+            for i,e in enumerate(end_pred):
+                mask[i,e+1:] = 1
+            start_prob = np.ma.array(start_prob,mask=mask)
+            start_prob = np.ma.filled(start_prob,neg_inf)
+            start_pred = np.argmax(start_prob, axis=-1) # array of shape: (batch_size,), argmaxes of starts' probabilities
+        return start_pred, end_pred
 
 def generate_squad_dataloaders(config):
     # ----------------------

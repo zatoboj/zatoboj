@@ -48,7 +48,7 @@ def default_config():
     config.model.signature = ''
 
     config.model.proj_dim = 20
-    config.model.weight = 1.
+    config.model.weight = 2.
     config.model.answer_punishment_coeff = 1.
     config.model.num_inner_products = 5
 
