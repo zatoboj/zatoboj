@@ -46,18 +46,17 @@ def create_model(config, loading = False):
         max_len = config.model.max_len
         freeze_layers = config.model.freeze_layers
         lr = config.model.lr
-        models_dict = {'SQUADBERT' : SQUADBERT, 'TensorBERT' : TensorBERT}
-        model_class = models_dict[config.model.model]
-        model = model_class([config])
+        model_class = globals()[config.model.model]
+        model = model_class(config)
         return model
     else:
         raise ValueError("Model with these configuration already exists. Please, work with the existing model, or change configuration. For example, you can add unique model signature: assign value like 'yourname-v1' to config.model.signature.")
 
 class SQUADBERT(pl.LightningModule):
-    def __init__(self, wrapped_config):
+    def __init__(self, config):
         super(SQUADBERT, self).__init__()    
         # initializing parameters
-        self.config = wrapped_config[0]
+        self.config = config
         self.batch_size = self.config.model.batch_size     
         self.max_len = self.config.model.max_len
         self.freeze_layers = self.config.model.freeze_layers
@@ -205,9 +204,9 @@ class SQUADBERT(pl.LightningModule):
 
 class TensorBERT(pl.LightningModule):
 
-    def __init__(self, wrapped_config):#proj_dim, num_inner_products, batch_size, weight =2., answer_punishment_coeff=1.):
+    def __init__(self, config):#proj_dim, num_inner_products, batch_size, weight =2., answer_punishment_coeff=1.):
         super(TensorBERT, self).__init__() 
-        self.config = wrapped_config[0]
+        self.config = config
         self.batch_size = self.config.model.batch_size
         self.max_len = self.config.model.max_len
         self.proj_dim = self.config.model.proj_dim

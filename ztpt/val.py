@@ -7,7 +7,7 @@ from .utils import numpify
 class Evaluator:
     def __init__(self, model):
         self.model = model
-        self.config = model.hparams.wrapped_config[0]
+        self.config = model.hparams.config
         self.metrics = model.val_metrics
 
     def get_stats_on_batch(self, batch):
@@ -16,18 +16,17 @@ class Evaluator:
         min_start = np.argmax(token_type_ids, axis=1)
 
         # batch statistics
-        stats = {}
-        stats['num_examples'] = batch_size
-        stats['actual_start'] = answer_starts
-        stats['actual_end'] = answer_ends
-        stats['actual_label'] = label
-        stats['input_ids'] = input_ids
-        stats['indexing'] = indexing
-        # stats['start_probs'] = start_prob
-        # stats['end_probs'] = end_prob
+        stats = {
+            'num_examples' : batch_size,
+            'actual_start' : answer_starts,
+            'actual_end' : answer_ends,
+            'actual_label' : label,
+            'input_ids' : input_ids,
+            'indexing' : indexing
+        }
+
         predictions = self.model.get_predictions(batch)
         for metric in self.metrics:
-            #start_pred, end_pred = self.model.get_predictions(batch, min_start, metric = metric)
             start_pred, end_pred = self.model.convert_predictions(numpify(*predictions), min_start, metric)
             label_pred = np.zeros(batch_size)
             label_pred[start_pred!=0] = 1 
@@ -65,7 +64,6 @@ class Evaluator:
             
         return results, val_dict
         
-#TODO: rewrite this function, right now it can't work -- metrics is not defined
 def evaluate(model, data_mode = 'val', verbose = True):
     evaluator = Evaluator(model)
     # choose dataloader
@@ -75,6 +73,8 @@ def evaluate(model, data_mode = 'val', verbose = True):
         data = model.val_dataloader()
     # initalize results dictionary
     results = {'num_examples' : 0}
+
+    metrics = model.val_metrics
     for metric in metrics:
         results[f'guessed_starts_{metric}'] = 0
         results[f'guessed_ends_{metric}'] = 0

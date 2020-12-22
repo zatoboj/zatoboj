@@ -36,7 +36,7 @@ def load_model(config = None, from_list = True):
             'max_len' : config.model.max_len,
             'freeze_layers' : config.model.freeze_layers,
             'lr' : config.model.lr,
-            'wrapped_config' : [config]      
+            'config' : config      
             }
         model = globals()[config.model.model].load_from_checkpoint(model_path, **hparams)
     else:
@@ -93,8 +93,7 @@ def train_model(config):
         resume_from_checkpoint = resume_from_checkpoint,
         **config.train.__dict__
         ) 
-    # trainer.save_checkpoint('EarlyStoppingADam-32-0.001.pth')
-    # wandb.save('EarlyStoppingADam-32-0.001.pth')   
+   
     trainer.fit(model) 
     with open(model_save_dir + model_name + '/config.yaml', 'w') as f:  
         yaml.dump(config, f)   
