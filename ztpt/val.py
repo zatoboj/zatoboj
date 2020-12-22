@@ -54,19 +54,16 @@ class Evaluator:
         batch_stats = self.get_stats_on_batch(batch)
         for key in results.keys():
             results[key] += batch_stats[key]
-        
-        ## ???????
-        accuracy = {'num_examples' : 0}
 
-        accuracy['val_loss'] = batch_stats['loss']
+        val_dict = {'val_loss' : batch_stats['loss']}
         for metric in self.metrics:
-            accuracy[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
-            accuracy[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
-            accuracy[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
-            accuracy[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
-            accuracy[f'contains_answer_acc/{metric}'] = results[f'contains_answer_{metric}'] / results['num_examples']
+            val_dict[f'EM_acc/{metric}'] = results[f'exact_matches_{metric}'] / results['num_examples']
+            val_dict[f'start_acc/{metric}'] = results[f'guessed_starts_{metric}'] / results['num_examples']
+            val_dict[f'end_acc/{metric}'] = results[f'guessed_ends_{metric}'] / results['num_examples']
+            val_dict[f'label_acc/{metric}'] = results[f'guessed_labels_{metric}'] / results['num_examples']
+            val_dict[f'contains_answer_acc/{metric}'] = results[f'contains_answer_{metric}'] / results['num_examples']
             
-        return results, accuracy
+        return results, val_dict
         
 #TODO: rewrite this function, right now it can't work -- metrics is not defined
 def evaluate(model, data_mode = 'val', verbose = True):

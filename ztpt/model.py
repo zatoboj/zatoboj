@@ -98,16 +98,11 @@ class SQUADBERT(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         predictions = self.forward(batch)     
         loss = self.compute_loss(predictions, batch)
-        #loss = loss_dict['loss']
-        #loss_dict['start_loss'] = start_loss
-        #loss_dict['end_loss'] = end_loss
 
-        self.custom_step += predictions[0].shape[0]
+        self.custom_step += batch[0].shape[0]
         # logs
         self.logger.experiment.log({
             'train_loss' : loss,
-            #'start_loss' : start_loss,
-            #'end_loss' : end_loss,
             'epoch' : self.current_epoch
             }, step = self.custom_step)
 
@@ -115,30 +110,17 @@ class SQUADBERT(pl.LightningModule):
 
     def compute_loss(self, predictions, batch):
         start_logits, end_logits = predictions
-        #loss_dict = {}     
         # LOSS: compute cross_entropy loss between predictions and actual labels for start and end 
         _, _, _, _, _, _, answer_starts, answer_ends = batch
         start_loss = F.cross_entropy(start_logits, answer_starts)
         end_loss = F.cross_entropy(end_logits, answer_ends)
         loss = start_loss + end_loss
-        #loss_dict['loss'] = loss
-        #loss_dict['start_loss'] = start_loss
-        #loss_dict['end_loss'] = end_loss
         return loss
-
 
     def validation_step(self, batch, batch_nb):
         evaluator = Evaluator(self)
-        #input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch
-        #start_logits, end_logits = self.forward(batch)
-        # loss
-        #loss1 = F.cross_entropy(start_logits, answer_starts)
-        #loss2 = F.cross_entropy(end_logits, answer_ends)
-        #loss = loss1 + loss2
-        _, accuracy_dict = evaluator.evaluate_on_batch(batch)
-        #accuracy_dict['val_loss'] = numpify(loss)   
-        self.log('val_loss', torch.tensor(accuracy_dict['val_loss']), prog_bar=True, logger=False)   
-        return accuracy_dict
+        _, val_dict = evaluator.evaluate_on_batch(batch) 
+        return val_dict
 
     def validation_epoch_end(self, val_step_outputs):
         log_dict = {}
@@ -146,11 +128,13 @@ class SQUADBERT(pl.LightningModule):
             aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
             log_dict[key] = aggregated
         self.logger.experiment.log(log_dict, step = self.custom_step)
+        self.log('val_loss', log_dict['val_loss'], prog_bar=True, logger=False)
+        # delete models from Trash using pydrive
         if self.config.dirs.py_drive:
-            for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
+            for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
-
+                  
     def configure_optimizers(self):
         return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
 
@@ -160,7 +144,6 @@ class SQUADBERT(pl.LightningModule):
         '''    
         with torch.no_grad():
             start_prob, end_prob = self.forward(batch)
-        #start_prob, end_prob = numpify(start_prob, end_prob)
         return start_prob, end_prob
 
     def convert_predictions(self, predictions, min_start, metric='plain'):
@@ -331,7 +314,7 @@ class TensorBERT(pl.LightningModule):
         log_dict = {'val_loss' : avg_loss, 'label_acc' : label_acc}
         self.logger.experiment.log(log_dict, step = self.custom_step)
         if self.config.dirs.py_drive:
-            for a_file in py_drive.ListFile({'q': "trashed=true"}).GetList():
+            for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
 
