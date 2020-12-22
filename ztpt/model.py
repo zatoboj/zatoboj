@@ -376,41 +376,10 @@ class TensorBERT(pl.LightningModule):
                             break
                     else:
                         break
-                start_pred[i] = current_index - 1
+                end_pred[i] = current_index - 1
 
             start_pred = start_pred * labels_pred
             end_pred = end_pred * labels_pred
-
-        elif metric == 'bysum':
-            probs = start_prob.reshape(-1,max_len,1) + end_prob.reshape(-1,1,max_len) # array of shape: (batch_size, max_len, max_len), matrix of pairwise sums per each element of the batch
-            mask = np.zeros(probs.shape)  # create a mask to avoid including cases where i > j or i > min_start or j > min_start
-            for i,s in enumerate(min_start):
-                mask[i,:s,:] = 1
-                mask[i,:,:s] = 1
-                mask[i][np.tril_indices(max_len,-1)] = 1
-            mask[:,0,0] = 0               # we however leave i=j=0 to detect questions without answers
-            probs = np.ma.array(probs,mask=mask)
-            probs = np.ma.filled(probs,neg_inf)
-            max_probs = np.argmax(probs.reshape(batch_size,-1), axis=-1) # array of shape: (batch_size,), argmaxes of flattened matrices of pairwise sums
-            start_pred, end_pred = np.unravel_index(max_probs, (max_len, max_len)) # two arrays of shape: (batch_size,), 'unflattenning' of max_probs
-        elif metric == 'byend':
-            # first we deal with ends
-            mask = np.zeros(end_prob.shape)  # create a mask to avoid including cases where end > min_start
-            for i,s in enumerate(min_start):
-                mask[i,:s] = 1
-            mask[:,0] = 0               # we however leave end=0 to detect questions without answers
-            end_prob = np.ma.array(end_prob,mask=mask)
-            start_prob = np.ma.array(start_prob,mask=mask)
-            end_prob = np.ma.filled(end_prob,neg_inf)
-            start_prob = np.ma.filled(start_prob,neg_inf)
-            end_pred = np.argmax(end_prob, axis=-1) # array of shape: (batch_size,), argmaxes of ends' probabilities
-            # now we deal with starts
-            mask = np.zeros(start_prob.shape)  # create a mask to avoid including cases where end > min_start
-            for i,e in enumerate(end_pred):
-                mask[i,e+1:] = 1
-            start_prob = np.ma.array(start_prob,mask=mask)
-            start_prob = np.ma.filled(start_prob,neg_inf)
-            start_pred = np.argmax(start_prob, axis=-1) # array of shape: (batch_size,), argmaxes of starts' probabilities
         return start_pred, end_pred
 
 def generate_squad_dataloaders(config):
