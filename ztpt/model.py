@@ -213,6 +213,7 @@ class TensorBERT(pl.LightningModule):
         self.answer_punishment_coeff = self.config.model.answer_punishment_coeff
         self.num_inner_products = self.config.model.num_inner_products
         self.val_metrics = ['plain']
+        self.lr = self.config.model.lr
 
         self.bert = get_transformer(self.config).cuda()
         self.bert_dim = self.bert.config.hidden_size #768
@@ -238,7 +239,8 @@ class TensorBERT(pl.LightningModule):
         long_logits = torch.reshape(long_logits, (current_batch_size, self.max_len, 2))
         return long_logits
 
-    def forward(self, input_ids, attention_mask, token_type_ids):      
+    def forward(self, batch):
+        input_ids, attention_mask, token_type_ids, _, _, _, _, _ = batch        
         bert_output_full, cls_pooler_output = self.bert(input_ids=input_ids, 
                          attention_mask=attention_mask, 
                          token_type_ids=token_type_ids)
@@ -256,21 +258,11 @@ class TensorBERT(pl.LightningModule):
         return cls_logits, long_logits
 
     def training_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch        
-        # fwd
-        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)
-        # loss for not guessing if there is an answer
-        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([self.weight,1.]))
-        # loss for each individual word -- is it in the answer?
-        # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
-        loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
-                                torch.reshape(answer_mask, (answer_mask.shape[0] * answer_mask.shape[1],)), weight = torch.Tensor([1.,50.]))
-        # total loss
-        # TODO: experiment with punishment coeff
-        loss = self.answer_punishment_coeff*loss1 + loss2
+        predictions = self.forward(batch)     
+        loss = self.compute_loss(predictions, batch)
 
-        self.custom_step += cls_logits.shape[0]
+        self.custom_step += batch[0].shape[0]
+        # logs
         self.logger.experiment.log({
             'train_loss' : loss,
             'epoch' : self.current_epoch
@@ -278,68 +270,39 @@ class TensorBERT(pl.LightningModule):
 
         return {'loss': loss}
 
-    def validation_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label, answer_mask, indexing, answer_starts, answer_ends = batch        
-        # fwd
-        cls_logits, long_logits = self.forward(input_ids, attention_mask, token_type_ids)        
-        # loss
+    def compute_loss(self, predictions, batch):
+        cls_logits, long_logits = predictions
+        _, _, _, label, answer_mask, _, _, _ = batch
         # loss for not guessing if there is an answer
-        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([2.,1.]))
+        loss1 = F.cross_entropy(cls_logits, label, weight = torch.Tensor([self.weight,1.]))
         # loss for each individual word -- is it in the answer?
-        # TODO: need to insert weight -- around 90 bc of mismatch of 0s and 1s -- only 1% are 1s
+        # TODO: need to insert pass weight -- around 90? bc of mismatch of 0s and 1s -- only 1% are 1s
         loss2 = F.cross_entropy(torch.reshape(long_logits, (long_logits.shape[0] * long_logits.shape[1], long_logits.shape[2])), 
-                                torch.reshape(answer_mask, (answer_mask.shape[0] * answer_mask.shape[1],)))#, weight = torch.Tensor([1.,self.weight]))
-        # total loss
-        # TODO: experiment with punishment coeff
-        val_loss = self.answer_punishment_coeff*loss1 + loss2
-        # compute accuracy 
-        # TODO: compute precision/recall on individual words, accuracy of start, end, exact match
-        # ну хоть одна переменная должна нормально называться
-        #_ , y1 = torch.max(cls_logits, dim=1)
-        #label_acc = torch.sum(y1 == label) / label.shape[0]
+                                torch.reshape(answer_mask, (answer_mask.shape[0] * answer_mask.shape[1],)), weight = torch.Tensor([1.,50.]))
+        
+        loss = self.answer_punishment_coeff*loss1 + loss2
+        return loss
 
-        #self.log('val_loss', val_loss, prog_bar=True, logger=False) 
-        #self.log('label_acc/plain', label_acc, prog_bar=True, logger=False)
-        _, accuracy_dict = evaluator.evaluate_on_batch(batch)
-        accuracy_dict['val_loss'] = numpify(loss)   
-        self.log('val_loss', loss, prog_bar=True, logger=False)   
-        return accuracy_dict
+    def validation_step(self, batch, batch_nb):
+        evaluator = Evaluator(self)
+        _, val_dict = evaluator.evaluate_on_batch(batch) 
+        return val_dict
 
-        #return {'val_loss' : val_loss, 'label_acc' : label_acc}
-    
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        label_acc = torch.stack([x['label_acc'] for x in outputs]).mean()
-        log_dict = {'val_loss' : avg_loss, 'label_acc' : label_acc}
+    def validation_epoch_end(self, val_step_outputs):
+        log_dict = {}
+        for key in val_step_outputs[0]:
+            aggregated = np.mean([accuracy_dict[key] for accuracy_dict in val_step_outputs])
+            log_dict[key] = aggregated
         self.logger.experiment.log(log_dict, step = self.custom_step)
+        self.log('val_loss', log_dict['val_loss'], prog_bar=True, logger=False)
+        # delete models from Trash using pydrive
         if self.config.dirs.py_drive:
             for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
-
-
-    '''
-    def test_step(self, batch, batch_nb):
-        input_ids, attention_mask, token_type_ids, label = batch
-        
-        y_hat, attn = self.forward(input_ids, attention_mask, token_type_ids)
-        
-        a, y_hat = torch.max(y_hat, dim=1)
-        test_acc = accuracy_score(y_hat.cpu(), label.cpu())
-        
-        return {'test_acc': torch.tensor(test_acc)}
-
-    def test_end(self, outputs):
-
-        avg_test_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
-
-        tensorboard_logs = {'avg_test_acc': avg_test_acc}
-        return {'avg_test_acc': avg_test_acc, 'log': tensorboard_logs, 'progress_bar': tensorboard_logs}
-    '''
-    
+  
     def configure_optimizers(self):
-        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=5e-06, eps=1e-08)
+        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.lr, eps=1e-08)
 
     def train_dataloader(self):
         return self.squad_train_dataloader
@@ -350,13 +313,13 @@ class TensorBERT(pl.LightningModule):
     def test_dataloader(self):
         return self.squad_test_dataloader
 
-    def get_numpy_predictions(self, batch):
+    def get_predictions(self, batch):
         '''
-        Returns numpy arrays (start probabilities, end probabilities) on given batch 
+        Returns arrays (label probabilities, individual word probabilities) on given batch 
         '''    
         with torch.no_grad():
             labels_prob, individual_words_prob = self.forward(batch)
-        labels_prob, individual_words_prob = numpify(labels_prob, individual_words_prob)
+        
         return labels_prob, individual_words_prob
 
     def convert_predictions(self, predictions, min_start, metric='plain'):
@@ -385,18 +348,31 @@ class TensorBERT(pl.LightningModule):
                     end_pred[i] = 0
                     continue
 
-                current_index = max_indices[i]
-                while individual_words_prob[i, current_index]>0 and current_index>0:
-                    current_index-=1
-                start_pred[i] = min(current_index+1, max_len)
+                current_index = max_indices[i] - 1
+                while True:
+                    if current_index >= min_start[i]:
+                        if individual_words_prob[i, current_index] > 0:
+                            current_index-=1
+                        else:
+                            break
+                    else:
+                        break
+                start_pred[i] = current_index + 1
 
-                current_index = max_indices[i]
-                while individual_words_prob[i, current_index]>0 and current_index<max_len:
-                    current_index+=1
-                start_pred[i] = max(current_index-1, 0)
+                current_index = max_indices[i] + 1
+                while True:
+                    if current_index < max_len:
+                        if individual_words_prob[i, current_index] > 0:
+                            current_index += 1
+                        else:
+                            break
+                    else:
+                        break
+                start_pred[i] = current_index - 1
 
             start_pred = start_pred * labels_pred
-            end_pred = np.end_pred * labels_pred       
+            end_pred = end_pred * labels_pred
+
         elif metric == 'bysum':
             probs = start_prob.reshape(-1,max_len,1) + end_prob.reshape(-1,1,max_len) # array of shape: (batch_size, max_len, max_len), matrix of pairwise sums per each element of the batch
             mask = np.zeros(probs.shape)  # create a mask to avoid including cases where i > j or i > min_start or j > min_start

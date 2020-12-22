@@ -49,7 +49,7 @@ def default_config():
 
     config.model.proj_dim = 20
     config.model.weight = 2.
-    config.model.answer_punishment_coeff = 1.
+    config.model.answer_punishment_coeff = 1.9
     config.model.num_inner_products = 5
 
     config.train.max_epochs = 1
