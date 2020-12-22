@@ -8,6 +8,9 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, RandomSampler, SequentialSampler, DataLoader, random_split
 from pytorch_lightning.loggers import WandbLogger
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from oauth2client.client import GoogleCredentials
 from .conf import ConfigNamespace
 from .utils import get_transformer, numpify
 from .preprocessing import load_data
@@ -41,7 +44,7 @@ def create_model(config, loading = False):
         if not os.path.exists(model_save_dir + model_name): 
             os.mkdir(model_save_dir + model_name)
         with open(model_save_dir + model_name + '/config.yaml', 'w') as f:  
-            yaml.dump(config, f)   
+            yaml.dump(config, f, default_flow_style=False)   
         batch_size = config.model.batch_size   
         max_len = config.model.max_len
         freeze_layers = config.model.freeze_layers
@@ -74,6 +77,10 @@ class SQUADBERT(pl.LightningModule):
         self.Start = nn.Linear(self.bert_dim, 1)
         self.End = nn.Linear(self.bert_dim, 1)
         self.custom_step = 0
+        if self.config.dirs.py_drive:
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            self.py_drive = GoogleDrive(gauth)
         
     def new_layers(self, bert_output, new_layer):
         logits_wrong_shape = new_layer(torch.reshape(bert_output, (bert_output.shape[0]*bert_output.shape[1], bert_output.shape[2])))
@@ -130,7 +137,7 @@ class SQUADBERT(pl.LightningModule):
         self.log('val_loss', log_dict['val_loss'], prog_bar=True, logger=False)
         # delete models from Trash using pydrive
         if self.config.dirs.py_drive:
-            for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
+            for a_file in self.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     title = a_file['title']
                     a_file.Delete()

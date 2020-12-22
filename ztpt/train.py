@@ -30,7 +30,7 @@ def load_model(config = None, from_list = True):
         model_path = model_path_v0
     if os.path.exists(model_path):
         with open(model_save_dir + model_name + '/config.yaml', 'r') as f:  
-            config = yaml.load(f, Loader=yaml.FullLoader) 
+            config = yaml.load(f, Loader=yaml.Loader) 
         hparams = {
             'batch_size' : config.model.batch_size,
             'max_len' : config.model.max_len,
@@ -52,8 +52,7 @@ def train_model(config):
         raise FileNotFoundError("Your root directory ('ybshmmlchk') is missing a saved models folder ('saved_models'). Be a dawg, copy shared saved models folder into root directory.")
     model_name = get_model_name(config)
     model_path = model_save_dir + model_name + '/model.ckpt'
-    # wandb_path = log_dir + 'wandb/' + model_name + '_id.pickle'  
-
+ 
     # initializing model
     if os.path.exists(model_path):
         print('Model already exists, loading trained model...')
@@ -64,8 +63,7 @@ def train_model(config):
         print('Creating new model...')
         model = create_model(config)
         resume_from_checkpoint = None
-        print('Succesfully created new model. Beginning training...')
-    
+        print('Succesfully created new model. Beginning training...')   
     # saving checkpoint
     checkpoint_callback = ModelCheckpoint(
         dirpath = model_save_dir + model_name,
