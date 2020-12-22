@@ -234,6 +234,10 @@ class TensorBERT(pl.LightningModule):
         self.squad_train_dataloader, self.squad_val_dataloader, self.squad_test_dataloader = generate_squad_dataloaders(self.config)
         self.save_hyperparameters()
         self.custom_step = 0
+        if self.config.dirs.py_drive:
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            self.py_drive = GoogleDrive(gauth)
 
     def my_forward_pass(self, cls_bert_output, bert_output_full):
         current_batch_size = bert_output_full.shape[0]
@@ -305,7 +309,7 @@ class TensorBERT(pl.LightningModule):
         self.log('val_loss', log_dict['val_loss'], prog_bar=True, logger=False)
         # delete models from Trash using pydrive
         if self.config.dirs.py_drive:
-            for a_file in self.config.dirs.py_drive.ListFile({'q': "trashed=true"}).GetList():
+            for a_file in self.py_drive.ListFile({'q': "trashed=true"}).GetList():
                 if a_file['title'] in {'model.ckpt', 'model-v0.ckpt'}:
                     a_file.Delete()
   
